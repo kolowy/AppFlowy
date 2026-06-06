@@ -20,7 +20,7 @@ class AppFlowyCloudMockAuthService implements AuthService {
   final String userEmail;
 
   final BackendAuthService _appFlowyAuthService =
-      BackendAuthService(AuthenticatorPB.Supabase);
+      BackendAuthService(AuthTypePB.Server);
 
   @override
   Future<FlowyResult<UserProfilePB, FlowyError>> signUp({
@@ -33,7 +33,8 @@ class AppFlowyCloudMockAuthService implements AuthService {
   }
 
   @override
-  Future<FlowyResult<UserProfilePB, FlowyError>> signInWithEmailPassword({
+  Future<FlowyResult<GotrueTokenResponsePB, FlowyError>>
+      signInWithEmailPassword({
     required String email,
     required String password,
     Map<String, String> params = const {},
@@ -47,7 +48,7 @@ class AppFlowyCloudMockAuthService implements AuthService {
     Map<String, String> params = const {},
   }) async {
     final payload = SignInUrlPayloadPB.create()
-      ..authenticator = AuthenticatorPB.AppFlowyCloud
+      ..authenticator = AuthTypePB.Server
       // don't use nanoid here, the gotrue server will transform the email
       ..email = userEmail;
 
@@ -57,7 +58,7 @@ class AppFlowyCloudMockAuthService implements AuthService {
     return getSignInURLResult.fold(
       (urlPB) async {
         final payload = OauthSignInPB(
-          authenticator: AuthenticatorPB.AppFlowyCloud,
+          authType: AuthTypePB.Server,
           map: {
             AuthServiceMapKeys.signInURL: urlPB.signInUrl,
             AuthServiceMapKeys.deviceId: deviceId,
@@ -68,7 +69,7 @@ class AppFlowyCloudMockAuthService implements AuthService {
           value.fold(
             (l) => null,
             (err) {
-              debugPrint("Error: $err");
+              debugPrint("mock auth service Error: $err");
               Log.error(err);
             },
           );
@@ -76,7 +77,7 @@ class AppFlowyCloudMockAuthService implements AuthService {
         });
       },
       (r) {
-        debugPrint("Error: $r");
+        debugPrint("mock auth service error: $r");
         return FlowyResult.failure(r);
       },
     );
@@ -105,5 +106,13 @@ class AppFlowyCloudMockAuthService implements AuthService {
   @override
   Future<FlowyResult<UserProfilePB, FlowyError>> getUser() async {
     return UserBackendService.getCurrentUserProfile();
+  }
+
+  @override
+  Future<FlowyResult<GotrueTokenResponsePB, FlowyError>> signInWithPasscode({
+    required String email,
+    required String passcode,
+  }) async {
+    throw UnimplementedError();
   }
 }

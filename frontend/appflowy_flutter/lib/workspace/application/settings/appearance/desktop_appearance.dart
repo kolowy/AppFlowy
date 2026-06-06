@@ -14,9 +14,10 @@ class DesktopAppearance extends BaseAppearance {
   ) {
     assert(codeFontFamily.isNotEmpty);
 
-    final theme = brightness == Brightness.light
-        ? appTheme.lightTheme
-        : appTheme.darkTheme;
+    fontFamily = fontFamily.isEmpty ? defaultFontFamily : fontFamily;
+
+    final isLight = brightness == Brightness.light;
+    final theme = isLight ? appTheme.lightTheme : appTheme.darkTheme;
 
     final colorScheme = ColorScheme(
       brightness: brightness,
@@ -48,12 +49,18 @@ class DesktopAppearance extends BaseAppearance {
 
     // Due to Desktop version has multiple themes, it relies on the current theme to build the ThemeData
     return ThemeData(
+      visualDensity: VisualDensity.standard,
       useMaterial3: false,
       brightness: brightness,
       dialogBackgroundColor: theme.surface,
       textTheme: getTextTheme(
         fontFamily: fontFamily,
         fontColor: theme.text,
+      ),
+      textButtonTheme: const TextButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size.zero),
+        ),
       ),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: theme.main2,
@@ -143,6 +150,8 @@ class DesktopAppearance extends BaseAppearance {
           borderColor: theme.borderColor,
           scrollbarColor: theme.scrollbarColor,
           scrollbarHoverColor: theme.scrollbarHoverColor,
+          lightIconColor: theme.lightIconColor,
+          toolbarHoverColor: theme.toolbarHoverColor,
         ),
       ],
     );

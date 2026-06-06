@@ -1,3 +1,4 @@
+import 'package:appflowy/features/page_access_level/logic/page_access_level_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/application/base/mobile_view_page_bloc.dart';
@@ -8,6 +9,8 @@ import 'package:appflowy/mobile/presentation/base/view_page/more_bottom_sheet.da
 import 'package:appflowy/mobile/presentation/bottom_sheet/bottom_sheet.dart';
 import 'package:appflowy/plugins/document/presentation/editor_notification.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/page_style/page_style_bottom_sheet.dart';
+import 'package:appflowy/plugins/shared/share/share_bloc.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/workspace/application/favorite/favorite_bloc.dart';
 import 'package:appflowy/workspace/application/view/prelude.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
@@ -26,12 +29,13 @@ class MobileViewPageImmersiveAppBar extends StatelessWidget
     required this.appBarOpacity,
     required this.title,
     required this.actions,
+    required this.view,
   });
 
   final ValueListenable appBarOpacity;
   final Widget title;
   final List<Widget> actions;
-
+  final ViewPB? view;
   @override
   final Size preferredSize;
 
@@ -41,9 +45,9 @@ class MobileViewPageImmersiveAppBar extends StatelessWidget
       valueListenable: appBarOpacity,
       builder: (_, opacity, __) => FlowyAppBar(
         backgroundColor:
-            AppBarTheme.of(context).backgroundColor?.withOpacity(opacity),
+            AppBarTheme.of(context).backgroundColor?.withValues(alpha: opacity),
         showDivider: false,
-        title: Opacity(opacity: opacity >= 0.99 ? 1.0 : 0, child: title),
+        title: _buildTitle(context, opacity: opacity),
         leadingWidth: 44,
         leading: Padding(
           padding: const EdgeInsets.only(top: 4.0, bottom: 4.0, left: 12.0),
@@ -52,6 +56,13 @@ class MobileViewPageImmersiveAppBar extends StatelessWidget
         actions: actions,
       ),
     );
+  }
+
+  Widget _buildTitle(
+    BuildContext context, {
+    required double opacity,
+  }) {
+    return title;
   }
 
   Widget _buildAppBarBackButton(BuildContext context) {
@@ -98,6 +109,9 @@ class MobileViewPageMoreButton extends StatelessWidget {
             providers: [
               BlocProvider.value(value: context.read<ViewBloc>()),
               BlocProvider.value(value: context.read<FavoriteBloc>()),
+              BlocProvider.value(value: context.read<MobileViewPageBloc>()),
+              BlocProvider.value(value: context.read<ShareBloc>()),
+              BlocProvider.value(value: context.read<PageAccessLevelBloc>()),
             ],
             child: MobileViewPageMoreBottomSheet(view: view),
           ),
@@ -120,9 +134,11 @@ class MobileViewPageLayoutButton extends StatelessWidget {
     required this.view,
     required this.isImmersiveMode,
     required this.appBarOpacity,
+    required this.tabs,
   });
 
   final ViewPB view;
+  final List<PickerTabType> tabs;
   final bool isImmersiveMode;
   final ValueListenable appBarOpacity;
 
@@ -153,6 +169,7 @@ class MobileViewPageLayoutButton extends StatelessWidget {
             ],
             child: PageStyleBottomSheet(
               view: context.read<ViewBloc>().state.view,
+              tabs: tabs,
             ),
           ),
         );
@@ -217,7 +234,7 @@ class _ImmersiveAppBarButton extends StatelessWidget {
               child = DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(dimension / 2.0),
-                  color: Colors.black.withOpacity(0.2),
+                  color: Colors.black.withValues(alpha: 0.2),
                 ),
                 child: child,
               );

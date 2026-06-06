@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/document/application/document_appearance_cubit.dart';
+import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy/shared/af_role_pb_extension.dart';
 import 'package:appflowy/shared/google_fonts_extension.dart';
 import 'package:appflowy/util/font_family_extension.dart';
@@ -12,7 +14,6 @@ import 'package:appflowy/workspace/application/settings/appearance/base_appearan
 import 'package:appflowy/workspace/application/settings/date_time/date_format_ext.dart';
 import 'package:appflowy/workspace/application/settings/date_time/time_format_ext.dart';
 import 'package:appflowy/workspace/application/settings/workspace/workspace_settings_bloc.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/space/shared_widget.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_icon.dart';
 import 'package:appflowy/workspace/presentation/home/toast.dart';
@@ -32,7 +33,6 @@ import 'package:appflowy/workspace/presentation/settings/widgets/theme_upload/th
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy/workspace/presentation/widgets/toggle/toggle.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/language.dart';
 import 'package:flowy_infra/plugins/bloc/dynamic_plugin_bloc.dart';
@@ -51,11 +51,11 @@ class SettingsWorkspaceView extends StatelessWidget {
   const SettingsWorkspaceView({
     super.key,
     required this.userProfile,
-    this.workspaceMember,
+    this.currentWorkspaceMemberRole,
   });
 
   final UserProfilePB userProfile;
-  final WorkspaceMemberPB? workspaceMember;
+  final AFRolePB? currentWorkspaceMemberRole;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +67,7 @@ class SettingsWorkspaceView extends StatelessWidget {
           if (state.deleteWorkspace) {
             context.read<UserWorkspaceBloc>().add(
                   UserWorkspaceEvent.deleteWorkspace(
-                    state.workspace!.workspaceId,
+                    workspaceId: state.workspace!.workspaceId,
                   ),
                 );
             Navigator.of(context).pop();
@@ -75,7 +75,7 @@ class SettingsWorkspaceView extends StatelessWidget {
           if (state.leaveWorkspace) {
             context.read<UserWorkspaceBloc>().add(
                   UserWorkspaceEvent.leaveWorkspace(
-                    state.workspace!.workspaceId,
+                    workspaceId: state.workspace!.workspaceId,
                   ),
                 );
             Navigator.of(context).pop();
@@ -88,11 +88,15 @@ class SettingsWorkspaceView extends StatelessWidget {
             autoSeparate: false,
             children: [
               // We don't allow changing workspace name/icon for local/offline
-              if (userProfile.authenticator != AuthenticatorPB.Local) ...[
+              if (userProfile.workspaceType != WorkspaceTypePB.LocalW) ...[
                 SettingsCategory(
                   title: LocaleKeys.settings_workspacePage_workspaceName_title
                       .tr(),
-                  children: [_WorkspaceNameSetting(member: workspaceMember)],
+                  children: [
+                    _WorkspaceNameSetting(
+                      currentWorkspaceMemberRole: currentWorkspaceMemberRole,
+                    ),
+                  ],
                 ),
                 const SettingsCategorySpacer(),
                 SettingsCategory(
@@ -103,7 +107,7 @@ class SettingsWorkspaceView extends StatelessWidget {
                       .tr(),
                   children: [
                     _WorkspaceIconSetting(
-                      enableEdit: workspaceMember?.role.isOwner ?? false,
+                      enableEdit: currentWorkspaceMemberRole?.isOwner ?? false,
                       workspace: state.workspace,
                     ),
                   ],
@@ -124,6 +128,7 @@ class SettingsWorkspaceView extends StatelessWidget {
                   _ThemeDropdown(),
                   _DocumentCursorColorSetting(),
                   _DocumentSelectionColorSetting(),
+                  DocumentPaddingSetting(),
                 ],
               ),
               const SettingsCategorySpacer(),
@@ -175,7 +180,7 @@ class SettingsWorkspaceView extends StatelessWidget {
               ),
               const SettingsCategorySpacer(),
 
-              if (userProfile.authenticator != AuthenticatorPB.Local) ...[
+              if (userProfile.workspaceType != WorkspaceTypePB.LocalW) ...[
                 SingleSettingAction(
                   label: LocaleKeys.settings_workspacePage_manageWorkspace_title
                       .tr(),
@@ -183,14 +188,14 @@ class SettingsWorkspaceView extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   onPressed: () => showConfirmDialog(
                     context: context,
-                    title: workspaceMember?.role.isOwner ?? false
+                    title: currentWorkspaceMemberRole?.isOwner ?? false
                         ? LocaleKeys
                             .settings_workspacePage_deleteWorkspacePrompt_title
                             .tr()
                         : LocaleKeys
                             .settings_workspacePage_leaveWorkspacePrompt_title
                             .tr(),
-                    description: workspaceMember?.role.isOwner ?? false
+                    description: currentWorkspaceMemberRole?.isOwner ?? false
                         ? LocaleKeys
                             .settings_workspacePage_deleteWorkspacePrompt_content
                             .tr()
@@ -198,14 +203,14 @@ class SettingsWorkspaceView extends StatelessWidget {
                             .settings_workspacePage_leaveWorkspacePrompt_content
                             .tr(),
                     style: ConfirmPopupStyle.cancelAndOk,
-                    onConfirm: () => context.read<WorkspaceSettingsBloc>().add(
-                          workspaceMember?.role.isOwner ?? false
+                    onConfirm: (_) => context.read<WorkspaceSettingsBloc>().add(
+                          currentWorkspaceMemberRole?.isOwner ?? false
                               ? const WorkspaceSettingsEvent.deleteWorkspace()
                               : const WorkspaceSettingsEvent.leaveWorkspace(),
                         ),
                   ),
                   buttonType: SingleSettingsButtonType.danger,
-                  buttonLabel: workspaceMember?.role.isOwner ?? false
+                  buttonLabel: currentWorkspaceMemberRole?.isOwner ?? false
                       ? LocaleKeys
                           .settings_workspacePage_manageWorkspace_deleteWorkspace
                           .tr()
@@ -223,9 +228,11 @@ class SettingsWorkspaceView extends StatelessWidget {
 }
 
 class _WorkspaceNameSetting extends StatefulWidget {
-  const _WorkspaceNameSetting({this.member});
+  const _WorkspaceNameSetting({
+    this.currentWorkspaceMemberRole,
+  });
 
-  final WorkspaceMemberPB? member;
+  final AFRolePB? currentWorkspaceMemberRole;
 
   @override
   State<_WorkspaceNameSetting> createState() => _WorkspaceNameSettingState();
@@ -234,7 +241,9 @@ class _WorkspaceNameSetting extends StatefulWidget {
 class _WorkspaceNameSettingState extends State<_WorkspaceNameSetting> {
   final TextEditingController workspaceNameController = TextEditingController();
   final focusNode = FocusNode();
-  Timer? _debounce;
+
+  Timer? debounce;
+  bool isSaving = false;
 
   @override
   void dispose() {
@@ -247,13 +256,18 @@ class _WorkspaceNameSettingState extends State<_WorkspaceNameSetting> {
   Widget build(BuildContext context) {
     return BlocConsumer<WorkspaceSettingsBloc, WorkspaceSettingsState>(
       listener: (_, state) {
+        if (isSaving) {
+          return;
+        }
+
         final newName = state.workspace?.name;
         if (newName != null && newName != workspaceNameController.text) {
           workspaceNameController.text = newName;
         }
       },
       builder: (_, state) {
-        if (widget.member == null || !widget.member!.role.isOwner) {
+        if (widget.currentWorkspaceMemberRole == null ||
+            !widget.currentWorkspaceMemberRole!.isOwner) {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 2.5),
             child: FlowyText.regular(
@@ -279,10 +293,15 @@ class _WorkspaceNameSettingState extends State<_WorkspaceNameSetting> {
   }
 
   void _debounceSaveName(String name) {
-    _debounce?.cancel();
-    _debounce = Timer(
+    isSaving = true;
+
+    debounce?.cancel();
+    debounce = Timer(
       const Duration(milliseconds: 300),
-      () => _saveWorkspaceName(name: name),
+      () {
+        _saveWorkspaceName(name: name);
+        isSaving = false;
+      },
     );
   }
 
@@ -328,7 +347,10 @@ class LanguageDropdown extends StatelessWidget {
 }
 
 class _WorkspaceIconSetting extends StatelessWidget {
-  const _WorkspaceIconSetting({required this.enableEdit, this.workspace});
+  const _WorkspaceIconSetting({
+    required this.enableEdit,
+    this.workspace,
+  });
 
   final bool enableEdit;
   final UserWorkspacePB? workspace;
@@ -343,26 +365,27 @@ class _WorkspaceIconSetting extends StatelessWidget {
       );
     }
 
-    return Container(
-      height: 64,
-      width: 64,
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outline),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(1),
-        child: WorkspaceIcon(
-          workspace: workspace!,
-          iconSize: workspace!.icon.isNotEmpty == true ? 46 : 20,
-          fontSize: 16.0,
-          enableEdit: true,
-          onSelected: (r) => context
-              .read<WorkspaceSettingsBloc>()
-              .add(WorkspaceSettingsEvent.updateWorkspaceIcon(r.emoji)),
-        ),
-      ),
+    Widget child = WorkspaceIcon(
+      workspaceIcon: workspace!.icon,
+      workspaceName: workspace!.name,
+      iconSize: 64.0,
+      emojiSize: 24.0,
+      fontSize: 24.0,
+      figmaLineHeight: 26.0,
+      borderRadius: 18.0,
+      isEditable: true,
+      onSelected: (r) => context
+          .read<WorkspaceSettingsBloc>()
+          .add(WorkspaceSettingsEvent.updateWorkspaceIcon(r.emoji)),
     );
+
+    if (!enableEdit) {
+      child = IgnorePointer(
+        child: child,
+      );
+    }
+
+    return child;
   }
 }
 
@@ -374,7 +397,7 @@ class TextDirectionSelect extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<AppearanceSettingsCubit, AppearanceSettingsState>(
       builder: (context, state) {
-        final selectedItem = state.textDirection ?? AppFlowyTextDirection.ltr;
+        final selectedItem = state.textDirection;
 
         return SettingsRadioSelect<AppFlowyTextDirection>(
           onChanged: (item) {
@@ -435,7 +458,7 @@ class EnableRTLItemsSwitcher extends StatelessWidget {
               .enableRtlToolbarItems,
           onChanged: (value) => context
               .read<AppearanceSettingsCubit>()
-              .setEnableRTLToolbarItems(!value),
+              .setEnableRTLToolbarItems(value),
         ),
       ],
     );
@@ -580,8 +603,8 @@ class _TimeFormatSwitcher extends StatelessWidget {
           onChanged: (value) =>
               context.read<AppearanceSettingsCubit>().setTimeFormat(
                     value
-                        ? UserTimeFormatPB.TwelveHour
-                        : UserTimeFormatPB.TwentyFourHour,
+                        ? UserTimeFormatPB.TwentyFourHour
+                        : UserTimeFormatPB.TwelveHour,
                   ),
         ),
       ],
@@ -624,7 +647,7 @@ class _ThemeDropdown extends StatelessWidget {
                     ),
                   ),
                 ).then((val) {
-                  if (val != null) {
+                  if (val != null && context.mounted) {
                     showSnackBarMessage(
                       context,
                       LocaleKeys.settings_appearance_themeUpload_uploadSuccess
@@ -1068,25 +1091,29 @@ class _FontListPopupState extends State<_FontListPopup> {
             child: ListView.separated(
               shrinkWrap: _filteredOptions.length < 10,
               controller: widget.scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               itemCount: _filteredOptions.length,
-              separatorBuilder: (_, __) => const VSpace(4),
+              separatorBuilder: (_, __) => const VSpace(6),
               itemBuilder: (context, index) {
                 final font = _filteredOptions[index];
                 final isSelected = widget.currentFont == font;
                 return SizedBox(
-                  height: 28,
+                  height: 29,
                   child: ListTile(
+                    minVerticalPadding: 0,
                     selected: isSelected,
                     dense: true,
                     hoverColor: Theme.of(context)
                         .colorScheme
                         .onSurface
-                        .withOpacity(0.12),
-                    selectedTileColor:
-                        Theme.of(context).colorScheme.primary.withOpacity(0.12),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 6),
-                    minTileHeight: 28,
+                        .withValues(alpha: 0.12),
+                    selectedTileColor: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.12),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    minTileHeight: 0,
                     onTap: () {
                       context
                           .read<AppearanceSettingsCubit>()
@@ -1100,11 +1127,14 @@ class _FontListPopupState extends State<_FontListPopup> {
 
                       widget.controller.close();
                     },
-                    title: Text(
-                      font.fontFamilyDisplayName,
-                      style: TextStyle(
-                        color: AFThemeExtension.of(context).textColor,
-                        fontFamily: getGoogleFontSafely(font).fontFamily,
+                    title: Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: Text(
+                        font.fontFamilyDisplayName,
+                        style: TextStyle(
+                          color: AFThemeExtension.of(context).textColor,
+                          fontFamily: getGoogleFontSafely(font).fontFamily,
+                        ),
                       ),
                     ),
                     trailing:
@@ -1142,7 +1172,7 @@ class _DocumentCursorColorSetting extends StatelessWidget {
                   .tr(),
               style: ConfirmPopupStyle.cancelAndOk,
               confirmLabel: LocaleKeys.settings_common_reset.tr(),
-              onConfirm: () => context
+              onConfirm: (_) => context
                 ..read<AppearanceSettingsCubit>().resetDocumentCursorColor()
                 ..read<DocumentAppearanceCubit>().syncCursorColor(null),
             );
@@ -1212,7 +1242,7 @@ class _DocumentSelectionColorSetting extends StatelessWidget {
                   .tr(),
               style: ConfirmPopupStyle.cancelAndOk,
               confirmLabel: LocaleKeys.settings_common_reset.tr(),
-              onConfirm: () => context
+              onConfirm: (_) => context
                 ..read<AppearanceSettingsCubit>().resetDocumentSelectionColor()
                 ..read<DocumentAppearanceCubit>().syncSelectionColor(null),
             );
@@ -1261,6 +1291,102 @@ class _SelectionColorValueWidget extends StatelessWidget {
           color: textColor,
         ),
       ],
+    );
+  }
+}
+
+class DocumentPaddingSetting extends StatelessWidget {
+  const DocumentPaddingSetting({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<DocumentAppearanceCubit, DocumentAppearance>(
+      builder: (context, state) {
+        return Column(
+          children: [
+            Row(
+              children: [
+                FlowyText.medium(
+                  LocaleKeys.settings_appearance_documentSettings_width.tr(),
+                ),
+                const Spacer(),
+                SettingsResetButton(
+                  onResetRequested: () =>
+                      context.read<DocumentAppearanceCubit>().syncWidth(null),
+                ),
+              ],
+            ),
+            const VSpace(6),
+            Container(
+              height: 32,
+              padding: const EdgeInsets.only(right: 4),
+              child: _DocumentPaddingSlider(
+                onPaddingChanged: (value) {
+                  context.read<DocumentAppearanceCubit>().syncWidth(value);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DocumentPaddingSlider extends StatefulWidget {
+  const _DocumentPaddingSlider({
+    required this.onPaddingChanged,
+  });
+
+  final void Function(double) onPaddingChanged;
+
+  @override
+  State<_DocumentPaddingSlider> createState() => _DocumentPaddingSliderState();
+}
+
+class _DocumentPaddingSliderState extends State<_DocumentPaddingSlider> {
+  late double width;
+
+  @override
+  void initState() {
+    super.initState();
+
+    width = context.read<DocumentAppearanceCubit>().state.width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<DocumentAppearanceCubit, DocumentAppearance>(
+      builder: (context, state) {
+        if (state.width != width) {
+          width = state.width;
+        }
+        return SliderTheme(
+          data: Theme.of(context).sliderTheme.copyWith(
+                showValueIndicator: ShowValueIndicator.never,
+                thumbShape: const RoundSliderThumbShape(
+                  enabledThumbRadius: 8,
+                ),
+                overlayShape: SliderComponentShape.noThumb,
+              ),
+          child: Slider(
+            value: width.clamp(
+              EditorStyleCustomizer.minDocumentWidth,
+              EditorStyleCustomizer.maxDocumentWidth,
+            ),
+            min: EditorStyleCustomizer.minDocumentWidth,
+            max: EditorStyleCustomizer.maxDocumentWidth,
+            divisions: 10,
+            onChanged: (value) {
+              setState(() => width = value);
+
+              widget.onPaddingChanged(value);
+            },
+          ),
+        );
+      },
     );
   }
 }

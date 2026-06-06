@@ -8,6 +8,7 @@ import 'package:appflowy/workspace/application/sidebar/rename_view/rename_view_b
 import 'package:appflowy/workspace/application/tabs/tabs_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/shared/sidebar_setting.dart';
 import 'package:appflowy_backend/log.dart';
+import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/user_profile.pb.dart';
 import 'package:flutter/material.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -18,6 +19,18 @@ typedef KeyDownHandler = void Function(HotKey hotKey);
 
 ValueNotifier<int> switchToTheNextSpace = ValueNotifier(0);
 ValueNotifier<int> createNewPageNotifier = ValueNotifier(0);
+ValueNotifier<ViewPB?> switchToSpaceNotifier = ValueNotifier(null);
+
+@visibleForTesting
+final zoomInKeyCodes = [KeyCode.equal, KeyCode.numpadAdd, KeyCode.add];
+@visibleForTesting
+final zoomOutKeyCodes = [KeyCode.minus, KeyCode.numpadSubtract];
+@visibleForTesting
+final resetZoomKeyCodes = [KeyCode.digit0, KeyCode.numpad0];
+
+// Use a global value to store the zoom level and update it in the hotkeys.
+@visibleForTesting
+double appflowyScaleFactor = 1.0;
 
 /// Helper class that utilizes the global [HotKeyManager] to easily
 /// add a [HotKey] with different handlers.
@@ -64,9 +77,7 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
         modifiers: [Platform.isMacOS ? KeyModifier.meta : KeyModifier.control],
         scope: HotKeyScope.inapp,
       ),
-      keyDownHandler: (_) => context
-          .read<HomeSettingBloc>()
-          .add(const HomeSettingEvent.collapseMenu()),
+      keyDownHandler: (_) => colappsedMenus(context),
     ),
 
     // Collapse sidebar menu (using .)
@@ -76,9 +87,7 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
         modifiers: [Platform.isMacOS ? KeyModifier.meta : KeyModifier.control],
         scope: HotKeyScope.inapp,
       ),
-      keyDownHandler: (_) => context
-          .read<HomeSettingBloc>()
-          .add(const HomeSettingEvent.collapseMenu()),
+      keyDownHandler: (_) => colappsedMenus(context),
     ),
 
     // Toggle theme mode light/dark
@@ -138,7 +147,7 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
 
     // Scale up/down the app
     // In some keyboards, the system returns equal as + keycode, while others may return add as + keycode, so add them both as zoom in key.
-    ...[KeyCode.equal, KeyCode.add].map(
+    ...zoomInKeyCodes.map(
       (keycode) => HotKeyItem(
         hotKey: HotKey(
           keycode,
@@ -151,23 +160,31 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
       ),
     ),
 
-    HotKeyItem(
-      hotKey: HotKey(
-        KeyCode.minus,
-        modifiers: [Platform.isMacOS ? KeyModifier.meta : KeyModifier.control],
-        scope: HotKeyScope.inapp,
+    ...zoomOutKeyCodes.map(
+      (keycode) => HotKeyItem(
+        hotKey: HotKey(
+          keycode,
+          modifiers: [
+            Platform.isMacOS ? KeyModifier.meta : KeyModifier.control,
+          ],
+          scope: HotKeyScope.inapp,
+        ),
+        keyDownHandler: (_) => _scaleWithStep(-0.1),
       ),
-      keyDownHandler: (_) => _scaleWithStep(-0.1),
     ),
 
     // Reset app scaling
-    HotKeyItem(
-      hotKey: HotKey(
-        KeyCode.digit0,
-        modifiers: [Platform.isMacOS ? KeyModifier.meta : KeyModifier.control],
-        scope: HotKeyScope.inapp,
+    ...resetZoomKeyCodes.map(
+      (keycode) => HotKeyItem(
+        hotKey: HotKey(
+          keycode,
+          modifiers: [
+            Platform.isMacOS ? KeyModifier.meta : KeyModifier.control,
+          ],
+          scope: HotKeyScope.inapp,
+        ),
+        keyDownHandler: (_) => _scale(1),
       ),
-      keyDownHandler: (_) => _scaleToSize(1),
     ),
 
     // Switch to the next space
@@ -191,7 +208,7 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
     ),
 
     // Open settings dialog
-    openSettingsHotKey(context, widget.userProfile),
+    openSettingsHotKey(context),
   ];
 
   @override
@@ -222,18 +239,41 @@ class _HomeHotKeysState extends State<HomeHotKeys> {
 
   Future<void> _scaleWithStep(double step) async {
     final currentScaleFactor = await windowSizeManager.getScaleFactor();
-    final textScale = (currentScaleFactor + step).clamp(
+
+    double textScale = (currentScaleFactor + step).clamp(
       WindowSizeManager.minScaleFactor,
       WindowSizeManager.maxScaleFactor,
     );
 
+    // only keep 2 decimal places
+    textScale = double.parse(textScale.toStringAsFixed(2));
+
     Log.info('scale the app from $currentScaleFactor to $textScale');
 
-    await _scaleToSize(textScale);
+    await _scale(textScale);
   }
 
-  Future<void> _scaleToSize(double size) async {
-    ScaledWidgetsFlutterBinding.instance.scaleFactor = (_) => size;
-    await windowSizeManager.setScaleFactor(size);
+  Future<void> _scale(double scaleFactor) async {
+    if (FlowyRunner.currentMode == IntegrationMode.integrationTest) {
+      // The integration test will fail if we check the scale factor in the test.
+      // #0      ScaledWidgetsFlutterBinding.Eval ()
+      // #1      ScaledWidgetsFlutterBinding.instance (package:scaled_app/scaled_app.dart:66:62)
+      appflowyScaleFactor = double.parse(scaleFactor.toStringAsFixed(2));
+    } else {
+      ScaledWidgetsFlutterBinding.instance.scaleFactor = (_) => scaleFactor;
+    }
+
+    await windowSizeManager.setScaleFactor(scaleFactor);
+  }
+
+  void colappsedMenus(BuildContext context) {
+    final bloc = context.read<HomeSettingBloc>();
+    final isNotificationPanelCollapsed =
+        bloc.state.isNotificationPanelCollapsed;
+    if (!isNotificationPanelCollapsed) {
+      bloc.add(const HomeSettingEvent.collapseNotificationPanel());
+    } else {
+      bloc.collapseMenu();
+    }
   }
 }

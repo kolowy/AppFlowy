@@ -35,7 +35,7 @@ class _CopyButton extends StatelessWidget {
             }
 
             final document = Document.blank()
-              ..insert([0], [node.copyWith()])
+              ..insert([0], [node.deepCopy()])
               ..toJson();
 
             await getIt<ClipboardService>().setData(
@@ -47,7 +47,6 @@ class _CopyButton extends StatelessWidget {
 
             if (context.mounted) {
               showToastNotification(
-                context,
                 message: LocaleKeys.document_codeBlock_codeCopiedSnackbar.tr(),
               );
             }

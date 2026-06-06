@@ -6,12 +6,13 @@ import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/workspace/application/home/home_setting_bloc.dart';
 import 'package:appflowy/workspace/application/menu/sidebar_sections_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/home_sizes.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/style_widget/hover.dart';
 import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 /// Sidebar top menu is the top bar of the sidebar.
 ///
@@ -30,7 +31,7 @@ class SidebarTopMenu extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SidebarSectionsBloc, SidebarSectionsState>(
       builder: (context, _) => SizedBox(
-        height: !PlatformExtension.isWindows ? HomeSizes.topBarHeight : 45,
+        height: !UniversalPlatform.isWindows ? HomeSizes.topBarHeight : 45,
         child: MoveWindowDetector(
           child: Row(
             children: [
@@ -50,8 +51,8 @@ class SidebarTopMenu extends StatelessWidget {
     }
 
     final svgData = Theme.of(context).brightness == Brightness.dark
-        ? FlowySvgs.flowy_logo_dark_mode_xl
-        : FlowySvgs.flowy_logo_text_xl;
+        ? FlowySvgs.app_logo_with_text_dark_xl
+        : FlowySvgs.app_logo_with_text_light_xl;
 
     return Padding(
       padding: const EdgeInsets.only(top: 12.0, left: 8),
@@ -64,20 +65,26 @@ class SidebarTopMenu extends StatelessWidget {
   }
 
   Widget _buildCollapseMenuButton(BuildContext context) {
+    final settingState = context.read<HomeSettingBloc?>()?.state;
+    final isNotificationPanelCollapsed =
+        settingState?.isNotificationPanelCollapsed ?? true;
+
     final textSpan = TextSpan(
       children: [
         TextSpan(
-          text: '${LocaleKeys.sideBar_closeSidebar.tr()}\n',
+          text: LocaleKeys.sideBar_closeSidebar.tr(),
           style: context.tooltipTextStyle(),
         ),
-        TextSpan(
-          text: Platform.isMacOS ? '⌘+.' : 'Ctrl+\\',
-          style: context
-              .tooltipTextStyle()
-              ?.copyWith(color: Theme.of(context).hintColor),
-        ),
+        if (isNotificationPanelCollapsed)
+          TextSpan(
+            text: '\n${Platform.isMacOS ? '⌘+.' : 'Ctrl+\\'}',
+            style: context
+                .tooltipTextStyle()
+                ?.copyWith(color: Theme.of(context).hintColor),
+          ),
       ],
     );
+    final theme = AppFlowyTheme.of(context);
 
     return ValueListenableBuilder(
       valueListenable: isSidebarOnHover,
@@ -89,14 +96,15 @@ class SidebarTopMenu extends StatelessWidget {
             richMessage: textSpan,
             child: Listener(
               behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) => context
-                  .read<HomeSettingBloc>()
-                  .add(const HomeSettingEvent.collapseMenu()),
+              onPointerDown: (_) =>
+                  context.read<HomeSettingBloc>().collapseMenu(),
               child: FlowyHover(
-                child: Container(
+                child: SizedBox(
                   width: 24,
-                  padding: const EdgeInsets.all(4),
-                  child: const FlowySvg(FlowySvgs.hide_menu_s),
+                  child: FlowySvg(
+                    FlowySvgs.double_back_arrow_m,
+                    color: theme.iconColorScheme.secondary,
+                  ),
                 ),
               ),
             ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/application/settings/file_storage/file_storage_listener.dart';
 import 'package:appflowy/workspace/application/subscription_success_listenable/subscription_success_listenable.dart';
+import 'package:appflowy/workspace/application/workspace/workspace_service.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
 import 'package:appflowy_backend/dispatch/error.dart';
 import 'package:appflowy_backend/log.dart';
@@ -12,42 +13,14 @@ import 'package:appflowy_backend/protobuf/flowy-user/user_profile.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/workspace.pb.dart';
 import 'package:bloc/bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+
 part 'sidebar_plan_bloc.freezed.dart';
 
 class SidebarPlanBloc extends Bloc<SidebarPlanEvent, SidebarPlanState> {
   SidebarPlanBloc() : super(const SidebarPlanState()) {
     // 1. Listen to user subscription payment callback. After user client 'Open AppFlowy', this listenable will be triggered.
-    final subscriptionListener = getIt<SubscriptionSuccessListenable>();
-    subscriptionListener.addListener(() {
-      final plan = subscriptionListener.subscribedPlan;
-      Log.info("Subscription success listenable triggered: $plan");
-
-      if (!isClosed) {
-        // Notify the user that they have switched to a new plan. It would be better if we use websocket to
-        // notify the client when plan switching.
-        if (state.workspaceId != null) {
-          final payload = SuccessWorkspaceSubscriptionPB(
-            workspaceId: state.workspaceId,
-          );
-
-          if (plan != null) {
-            payload.plan = plan;
-          }
-
-          UserEventNotifyDidSwitchPlan(payload).send().then((result) {
-            result.fold(
-              // After the user has switched to a new plan, we need to refresh the workspace usage.
-              (_) => _checkWorkspaceUsage(),
-              (error) => Log.error("NotifyDidSwitchPlan failed: $error"),
-            );
-          });
-        } else {
-          Log.error(
-            "Unexpected empty workspace id when subscription success listenable triggered. It should not happen. If happens, it must be a bug",
-          );
-        }
-      }
-    });
+    _subscriptionListener = getIt<SubscriptionSuccessListenable>();
+    _subscriptionListener.addListener(_onPaymentSuccessful);
 
     // 2. Listen to the storage notification
     _storageListener = StoreageNotificationListener(
@@ -77,16 +50,49 @@ class SidebarPlanBloc extends Bloc<SidebarPlanEvent, SidebarPlanState> {
     on<SidebarPlanEvent>(_handleEvent);
   }
 
+  void _onPaymentSuccessful() {
+    final plan = _subscriptionListener.subscribedPlan;
+    Log.info("Subscription success listenable triggered: $plan");
+
+    if (!isClosed) {
+      // Notify the user that they have switched to a new plan. It would be better if we use websocket to
+      // notify the client when plan switching.
+      if (state.workspaceId != null) {
+        final payload = SuccessWorkspaceSubscriptionPB(
+          workspaceId: state.workspaceId,
+        );
+
+        if (plan != null) {
+          payload.plan = plan;
+        }
+
+        UserEventNotifyDidSwitchPlan(payload).send().then((result) {
+          result.fold(
+            // After the user has switched to a new plan, we need to refresh the workspace usage.
+            (_) => _checkWorkspaceUsage(),
+            (error) => Log.error("NotifyDidSwitchPlan failed: $error"),
+          );
+        });
+      } else {
+        Log.error(
+          "Unexpected empty workspace id when subscription success listenable triggered. It should not happen. If happens, it must be a bug",
+        );
+      }
+    }
+  }
+
   Future<void> dispose() async {
     if (_globalErrorListener != null) {
       GlobalErrorCodeNotifier.remove(_globalErrorListener!);
     }
+    _subscriptionListener.removeListener(_onPaymentSuccessful);
     await _storageListener?.stop();
     _storageListener = null;
   }
 
   ErrorListener? _globalErrorListener;
   StoreageNotificationListener? _storageListener;
+  late final SubscriptionSuccessListenable _subscriptionListener;
 
   Future<void> _handleEvent(
     SidebarPlanEvent event,
@@ -106,6 +112,13 @@ class SidebarPlanBloc extends Bloc<SidebarPlanEvent, SidebarPlanState> {
               tierIndicator: const SidebarToastTierIndicator.storageLimitHit(),
             ),
           );
+        } else if (error.code == ErrorCode.SingleUploadLimitExceeded) {
+          emit(
+            state.copyWith(
+              tierIndicator:
+                  const SidebarToastTierIndicator.singleFileLimitHit(),
+            ),
+          );
         } else {
           Log.error("Unhandle Unexpected error: $error");
         }
@@ -117,6 +130,7 @@ class SidebarPlanBloc extends Bloc<SidebarPlanEvent, SidebarPlanState> {
             userProfile: userProfile,
           ),
         );
+
         _checkWorkspaceUsage();
       },
       updateWorkspaceUsage: (WorkspaceUsagePB usage) {
@@ -162,23 +176,41 @@ class SidebarPlanBloc extends Bloc<SidebarPlanEvent, SidebarPlanState> {
           ),
         );
       },
+      changedWorkspace: (workspaceId) {
+        emit(state.copyWith(workspaceId: workspaceId));
+        _checkWorkspaceUsage();
+      },
     );
   }
 
-  void _checkWorkspaceUsage() {
-    if (state.workspaceId != null) {
-      final payload = UserWorkspaceIdPB(workspaceId: state.workspaceId!);
-      UserEventGetWorkspaceUsage(payload).send().then((result) {
-        result.fold(
-          (usage) {
-            add(SidebarPlanEvent.updateWorkspaceUsage(usage));
-          },
-          (error) {
-            Log.error("Failed to get workspace usage, error: $error");
-          },
-        );
-      });
+  Future<void> _checkWorkspaceUsage() async {
+    if (state.workspaceId == null || state.userProfile == null) {
+      return;
     }
+
+    await WorkspaceService(
+      workspaceId: state.workspaceId!,
+      userId: state.userProfile!.id,
+    ).getWorkspaceUsage().then((result) {
+      result.fold(
+        (usage) {
+          if (!isClosed) {
+            // if the user cannot fetch the workspace usage,
+            // clear the tier indicator
+            if (usage == null) {
+              add(
+                const SidebarPlanEvent.updateTierIndicator(
+                  SidebarToastTierIndicator.loading(),
+                ),
+              );
+            } else {
+              add(SidebarPlanEvent.updateWorkspaceUsage(usage));
+            }
+          }
+        },
+        (error) => Log.error("Failed to get workspace usage: $error"),
+      );
+    });
   }
 }
 
@@ -195,6 +227,10 @@ class SidebarPlanEvent with _$SidebarPlanEvent {
     SidebarToastTierIndicator indicator,
   ) = _UpdateTierIndicator;
   const factory SidebarPlanEvent.receiveError(FlowyError error) = _ReceiveError;
+
+  const factory SidebarPlanEvent.changedWorkspace({
+    required String workspaceId,
+  }) = _ChangedWorkspace;
 }
 
 @freezed
@@ -211,8 +247,9 @@ class SidebarPlanState with _$SidebarPlanState {
 
 @freezed
 class SidebarToastTierIndicator with _$SidebarToastTierIndicator {
-  // when start downloading the model
   const factory SidebarToastTierIndicator.storageLimitHit() = _StorageLimitHit;
+  const factory SidebarToastTierIndicator.singleFileLimitHit() =
+      _SingleFileLimitHit;
   const factory SidebarToastTierIndicator.aiMaxiLimitHit() = _aiMaxLimitHit;
   const factory SidebarToastTierIndicator.loading() = _Loading;
 }

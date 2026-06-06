@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:appflowy/plugins/document/presentation/editor_drop_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:appflowy/generated/flowy_svgs.g.dart';
@@ -11,13 +12,12 @@ import 'package:appflowy/plugins/document/presentation/editor_plugins/image/comm
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/custom_image_block_component/custom_image_block_component.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/image_util.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/upload_image_menu/upload_image_menu.dart';
-import 'package:appflowy/shared/patterns/common_patterns.dart';
+import 'package:appflowy/shared/patterns/file_type_patterns.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/application/settings/application_data_storage.dart';
 import 'package:appflowy/workspace/presentation/home/toast.dart';
 import 'package:appflowy_backend/log.dart';
-import 'package:appflowy_editor/appflowy_editor.dart' hide Log, UploadImageMenu;
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy_editor/appflowy_editor.dart' hide UploadImageMenu;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/uuid.dart';
@@ -29,6 +29,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart';
 import 'package:path/path.dart' as p;
 import 'package:string_validator/string_validator.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 class ImagePlaceholder extends StatefulWidget {
   const ImagePlaceholder({super.key, required this.node});
@@ -44,10 +45,26 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
   final documentService = DocumentService();
   late final editorState = context.read<EditorState>();
 
+  late EditorDropManagerState? dropManagerState = UniversalPlatform.isMobile
+      ? null
+      : context.read<EditorDropManagerState?>();
+
+  bool get isDragEnabled =>
+      dropManagerState?.isDropEnabled == true ||
+      dropManagerState?.contains(CustomImageBlockKeys.type) == true;
+
   bool showLoading = false;
   String? errorMessage;
 
   bool isDraggingFiles = false;
+
+  @override
+  void didChangeDependencies() {
+    if (UniversalPlatform.isMobile) {
+      dropManagerState = context.read<EditorDropManagerState>();
+    }
+    super.didChangeDependencies();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,9 +88,10 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
           child: Row(
             children: [
               const HSpace(10),
-              const FlowySvg(
-                FlowySvgs.image_placeholder_s,
-                size: Size.square(24),
+              FlowySvg(
+                FlowySvgs.slash_menu_icon_image_s,
+                size: const Size.square(24),
+                color: Theme.of(context).hintColor,
               ),
               const HSpace(10),
               ..._buildTrailing(context),
@@ -83,7 +101,7 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
       ),
     );
 
-    if (PlatformExtension.isDesktopOrWeb) {
+    if (UniversalPlatform.isDesktopOrWeb) {
       return AppFlowyPopover(
         controller: controller,
         direction: PopoverDirection.bottomWithCenterAligned,
@@ -101,13 +119,14 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
               UploadImageType.local,
               UploadImageType.url,
               UploadImageType.unsplash,
-              UploadImageType.stabilityAI,
             ],
-            onSelectedLocalImages: (paths) {
+            onSelectedLocalImages: (files) {
               controller.close();
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 final List<String> items = List.from(
-                  paths.where((url) => url != null && url.isNotEmpty),
+                  files
+                      .where((file) => file.path.isNotEmpty)
+                      .map((file) => file.path),
                 );
                 if (items.isNotEmpty) {
                   await insertMultipleLocalImages(items);
@@ -129,8 +148,15 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
           );
         },
         child: DropTarget(
-          onDragEntered: (_) => setState(() => isDraggingFiles = true),
-          onDragExited: (_) => setState(() => isDraggingFiles = false),
+          enable: isDragEnabled,
+          onDragEntered: (_) {
+            if (isDragEnabled) {
+              setState(() => isDraggingFiles = true);
+            }
+          },
+          onDragExited: (_) {
+            setState(() => isDraggingFiles = false);
+          },
           onDragDone: (details) {
             // Only accept files where the mimetype is an image,
             // otherwise we assume it's a file we cannot display.
@@ -187,11 +213,12 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
       return [
         Flexible(
           child: FlowyText(
-            PlatformExtension.isDesktop
+            UniversalPlatform.isDesktop
                 ? isDraggingFiles
                     ? LocaleKeys.document_plugins_image_dropImageToInsert.tr()
                     : LocaleKeys.document_plugins_image_addAnImageDesktop.tr()
                 : LocaleKeys.document_plugins_image_addAnImageMobile.tr(),
+            color: Theme.of(context).hintColor,
           ),
         ),
       ];
@@ -199,7 +226,7 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
   }
 
   void showUploadImageMenu() {
-    if (PlatformExtension.isDesktopOrWeb) {
+    if (UniversalPlatform.isDesktopOrWeb) {
       controller.show();
     } else {
       final isLocalMode = _isLocalMode();
@@ -223,12 +250,13 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
                 UploadImageType.url,
                 UploadImageType.unsplash,
               ],
-              onSelectedLocalImages: (paths) async {
+              onSelectedLocalImages: (files) async {
                 context.pop();
 
-                final List<String> items = List.from(
-                  paths.where((url) => url != null && url.isNotEmpty),
-                );
+                final items = files
+                    .where((file) => file.path.isNotEmpty)
+                    .map((file) => file.path)
+                    .toList();
 
                 await insertMultipleLocalImages(items);
               },
@@ -249,6 +277,10 @@ class ImagePlaceholderState extends State<ImagePlaceholder> {
 
   Future<void> insertMultipleLocalImages(List<String> urls) async {
     controller.close();
+
+    if (urls.isEmpty) {
+      return;
+    }
 
     setState(() {
       showLoading = true;

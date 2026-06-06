@@ -128,14 +128,14 @@
   "questionBubble": {
     "shortcuts": "Atalhos",
     "whatsNew": "O que há de novo?",
-    "help": "Ajuda & Suporte",
     "markdown": "Remarcação",
     "debug": {
       "name": "Informação de depuração",
       "success": "Copiar informação de depuração para o clipboard!",
       "fail": "Falha em copiar a informação de depuração para o clipboard"
     },
-    "feedback": "Opinião"
+    "feedback": "Opinião",
+    "help": "Ajuda & Suporte"
   },
   "menuAppHeader": {
     "moreButtonToolTip": "Remover, renomear e muito mais...",
@@ -255,8 +255,7 @@
       "inputTextFieldHint": "A sua palavra-chave",
       "historicalUserList": "Histórico de login do utilizador",
       "historicalUserListTooltip": "Esta lista mostrs suas contas anónimas. Pode clicar numa conta para ver os detalhes. Contas anónimas são criadas clicando no botão ‘Começar’",
-      "openHistoricalUser": "Clique para abrir a conta anónima",
-      "supabaseSetting": "Configuração de Supabase"
+      "openHistoricalUser": "Clique para abrir a conta anónima"
     },
     "notifications": {
       "enableNotifications": {
@@ -363,8 +362,8 @@
       "tooltipSelectIcon": "Selecione o ícone",
       "selectAnIcon": "Selecione um ícone",
       "pleaseInputYourOpenAIKey": "por favor insira sua chave AI",
-      "pleaseInputYourStabilityAIKey": "por favor, insira a sua chave Stability AI",
-      "clickToLogout": "Clique para fazer logout"
+      "clickToLogout": "Clique para fazer logout",
+      "pleaseInputYourStabilityAIKey": "por favor, insira a sua chave Stability AI"
     },
     "shortcuts": {
       "shortcutsLabel": "Atalhos",
@@ -625,8 +624,8 @@
         "defaultColor": "Padrão"
       },
       "image": {
-        "copiedToPasteBoard": "O link da imagem foi copiado para a área de transferência",
-        "addAnImage": "Adicione uma imagem"
+        "addAnImage": "Adicione uma imagem",
+        "copiedToPasteBoard": "O link da imagem foi copiado para a área de transferência"
       },
       "outline": {
         "addHeadingToCreateOutline": "Adicione títulos para criar um sumário."

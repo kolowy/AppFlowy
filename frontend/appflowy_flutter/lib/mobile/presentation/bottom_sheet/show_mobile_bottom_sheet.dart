@@ -1,5 +1,6 @@
 import 'package:appflowy/mobile/presentation/bottom_sheet/bottom_sheet_buttons.dart';
 import 'package:appflowy/plugins/base/drag_handler.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 
@@ -47,13 +48,18 @@ Future<T?> showMobileBottomSheet<T>(
   Color? barrierColor,
   double? elevation,
   bool showDoneButton = false,
+  void Function(BuildContext context)? onDone,
   bool enableDraggableScrollable = false,
+  bool enableScrollable = false,
   // this field is only used if showDragHandle is true
   Widget Function(BuildContext, ScrollController)? scrollableWidgetBuilder,
   // only used when enableDraggableScrollable is true
   double minChildSize = 0.5,
   double maxChildSize = 0.8,
   double initialChildSize = 0.51,
+  double bottomSheetPadding = 0,
+  bool enablePadding = true,
+  WidgetBuilder? dragHandleBuilder,
 }) async {
   assert(
     showHeader ||
@@ -70,7 +76,7 @@ Future<T?> showMobileBottomSheet<T>(
   backgroundColor ??= Theme.of(context).brightness == Brightness.light
       ? const Color(0xFFF7F8FB)
       : const Color(0xFF23262B);
-  barrierColor ??= Colors.black.withOpacity(0.3);
+  barrierColor ??= Colors.black.withValues(alpha: 0.3);
 
   return showModalBottomSheet<T>(
     context: context,
@@ -97,7 +103,7 @@ Future<T?> showMobileBottomSheet<T>(
       // ----- header area -----
       if (showDragHandle) {
         children.add(
-          const DragHandle(),
+          dragHandleBuilder?.call(context) ?? const DragHandle(),
         );
       }
 
@@ -110,6 +116,7 @@ Future<T?> showMobileBottomSheet<T>(
             showRemoveButton: showRemoveButton,
             title: title,
             onRemove: onRemove,
+            onDone: onDone,
           ),
         );
 
@@ -141,6 +148,7 @@ Future<T?> showMobileBottomSheet<T>(
                     ) ??
                     Expanded(
                       child: Scrollbar(
+                        controller: scrollController,
                         child: SingleChildScrollView(
                           controller: scrollController,
                           child: child,
@@ -151,17 +159,34 @@ Future<T?> showMobileBottomSheet<T>(
             );
           },
         );
+      } else if (enableScrollable) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...children,
+            Flexible(
+              child: SingleChildScrollView(
+                child: child,
+              ),
+            ),
+            VSpace(bottomSheetPadding),
+          ],
+        );
       }
 
       // ----- content area -----
-      // add content padding and extra bottom padding
-      children.add(
-        Padding(
-          padding:
-              padding + EdgeInsets.only(bottom: context.bottomSheetPadding()),
-          child: child,
-        ),
-      );
+      if (enablePadding) {
+        // add content padding and extra bottom padding
+        children.add(
+          Padding(
+            padding:
+                padding + EdgeInsets.only(bottom: context.bottomSheetPadding()),
+            child: child,
+          ),
+        );
+      } else {
+        children.add(child);
+      }
       // ----- content area -----
 
       if (children.length == 1) {
@@ -192,17 +217,27 @@ class BottomSheetHeader extends StatelessWidget {
     required this.title,
     required this.showDoneButton,
     this.onRemove,
+    this.onDone,
+    this.onBack,
+    this.onClose,
   });
+
+  final String title;
 
   final bool showBackButton;
   final bool showCloseButton;
   final bool showRemoveButton;
-  final String title;
   final bool showDoneButton;
+
   final VoidCallback? onRemove;
+  final VoidCallback? onBack;
+  final VoidCallback? onClose;
+
+  final void Function(BuildContext context)? onDone;
 
   @override
   Widget build(BuildContext context) {
+    final theme = AppFlowyTheme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 4.0),
       child: SizedBox(
@@ -210,14 +245,18 @@ class BottomSheetHeader extends StatelessWidget {
         child: Stack(
           children: [
             if (showBackButton)
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
-                child: BottomSheetBackButton(),
+                child: BottomSheetBackButton(
+                  onTap: onBack,
+                ),
               ),
             if (showCloseButton)
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
-                child: BottomSheetCloseButton(),
+                child: BottomSheetCloseButton(
+                  onTap: onClose,
+                ),
               ),
             if (showRemoveButton)
               Align(
@@ -229,11 +268,11 @@ class BottomSheetHeader extends StatelessWidget {
             Align(
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 250),
-                child: FlowyText(
+                child: Text(
                   title,
-                  fontSize: 17.0,
-                  fontWeight: FontWeight.w500,
-                  overflow: TextOverflow.ellipsis,
+                  style: theme.textStyle.heading4.prominent(
+                    color: theme.textColorScheme.primary,
+                  ),
                 ),
               ),
             ),
@@ -241,7 +280,13 @@ class BottomSheetHeader extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: BottomSheetDoneButton(
-                  onDone: () => Navigator.pop(context),
+                  onDone: () {
+                    if (onDone != null) {
+                      onDone?.call(context);
+                    } else {
+                      Navigator.pop(context);
+                    }
+                  },
                 ),
               ),
           ],

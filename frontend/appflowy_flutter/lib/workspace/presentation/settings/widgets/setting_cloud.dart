@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/env/cloud_env.dart';
 import 'package:appflowy/env/env.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
@@ -13,19 +11,21 @@ import 'package:appflowy/workspace/presentation/settings/shared/settings_body.da
 import 'package:appflowy/workspace/presentation/settings/shared/settings_dropdown.dart';
 import 'package:appflowy/workspace/presentation/settings/widgets/setting_local_cloud.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
 import 'package:collection/collection.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 import 'setting_appflowy_cloud.dart';
-import 'setting_supabase_cloud.dart';
 
 class SettingCloud extends StatelessWidget {
-  const SettingCloud({required this.restartAppFlowy, super.key});
+  const SettingCloud({
+    super.key,
+    required this.restartAppFlowy,
+  });
 
   final VoidCallback restartAppFlowy;
 
@@ -46,23 +46,7 @@ class SettingCloud extends StatelessWidget {
                   autoSeparate: false,
                   children: [
                     if (Env.enableCustomCloud)
-                      Row(
-                        children: [
-                          Expanded(
-                            child: FlowyText.medium(
-                              LocaleKeys.settings_menu_cloudServerType.tr(),
-                            ),
-                          ),
-                          Flexible(
-                            child: CloudTypeSwitcher(
-                              cloudType: state.cloudType,
-                              onSelected: (type) => context
-                                  .read<CloudSettingBloc>()
-                                  .add(CloudSettingEvent.updateCloudType(type)),
-                            ),
-                          ),
-                        ],
-                      ),
+                      _CloudServerSwitcher(cloudType: state.cloudType),
                     _viewFromCloudType(state.cloudType),
                   ],
                 );
@@ -80,8 +64,6 @@ class SettingCloud extends StatelessWidget {
     switch (cloudType) {
       case AuthenticatorType.local:
         return SettingLocalCloud(restartAppFlowy: restartAppFlowy);
-      case AuthenticatorType.supabase:
-        return SettingSupabaseCloudView(restartAppFlowy: restartAppFlowy);
       case AuthenticatorType.appflowyCloud:
         return AppFlowyCloudViewSetting(restartAppFlowy: restartAppFlowy);
       case AuthenticatorType.appflowyCloudSelfHost:
@@ -111,14 +93,9 @@ class CloudTypeSwitcher extends StatelessWidget {
     final isDevelopMode = integrationMode().isDevelop;
     // Only show the appflowyCloudDevelop in develop mode
     final values = AuthenticatorType.values.where((element) {
-      // Supabase will going to be removed in the future
-      if (element == AuthenticatorType.supabase) {
-        return false;
-      }
-
       return isDevelopMode || element != AuthenticatorType.appflowyCloudDevelop;
     }).toList();
-    return PlatformExtension.isDesktopOrWeb
+    return UniversalPlatform.isDesktopOrWeb
         ? SettingsDropdown(
             selectedOption: cloudType,
             onChanged: (type) {
@@ -143,7 +120,9 @@ class CloudTypeSwitcher extends StatelessWidget {
                 .toList(),
           )
         : FlowyButton(
-            text: FlowyText(titleFromCloudType(cloudType)),
+            text: FlowyText(
+              titleFromCloudType(cloudType),
+            ),
             useIntrinsicWidth: true,
             rightIcon: const Icon(
               Icons.chevron_right,
@@ -178,12 +157,12 @@ class CloudTypeItem extends StatelessWidget {
   const CloudTypeItem({
     super.key,
     required this.cloudType,
-    required this.currentCloudtype,
+    required this.currentCloudType,
     required this.onSelected,
   });
 
   final AuthenticatorType cloudType;
-  final AuthenticatorType currentCloudtype;
+  final AuthenticatorType currentCloudType;
   final Function(AuthenticatorType) onSelected;
 
   @override
@@ -194,11 +173,11 @@ class CloudTypeItem extends StatelessWidget {
         text: FlowyText.medium(
           titleFromCloudType(cloudType),
         ),
-        rightIcon: currentCloudtype == cloudType
+        rightIcon: currentCloudType == cloudType
             ? const FlowySvg(FlowySvgs.check_s)
             : null,
         onTap: () {
-          if (currentCloudtype != cloudType) {
+          if (currentCloudType != cloudType) {
             NavigatorAlertDialog(
               title: LocaleKeys.settings_menu_changeServerTip.tr(),
               confirm: () async {
@@ -214,12 +193,54 @@ class CloudTypeItem extends StatelessWidget {
   }
 }
 
+class _CloudServerSwitcher extends StatelessWidget {
+  const _CloudServerSwitcher({
+    required this.cloudType,
+  });
+
+  final AuthenticatorType cloudType;
+
+  @override
+  Widget build(BuildContext context) {
+    return UniversalPlatform.isDesktopOrWeb
+        ? Row(
+            children: [
+              Expanded(
+                child: FlowyText.medium(
+                  LocaleKeys.settings_menu_cloudServerType.tr(),
+                ),
+              ),
+              Flexible(
+                child: CloudTypeSwitcher(
+                  cloudType: cloudType,
+                  onSelected: (type) => context
+                      .read<CloudSettingBloc>()
+                      .add(CloudSettingEvent.updateCloudType(type)),
+                ),
+              ),
+            ],
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              FlowyText.medium(
+                LocaleKeys.settings_menu_cloudServerType.tr(),
+              ),
+              CloudTypeSwitcher(
+                cloudType: cloudType,
+                onSelected: (type) => context
+                    .read<CloudSettingBloc>()
+                    .add(CloudSettingEvent.updateCloudType(type)),
+              ),
+            ],
+          );
+  }
+}
+
 String titleFromCloudType(AuthenticatorType cloudType) {
   switch (cloudType) {
     case AuthenticatorType.local:
       return LocaleKeys.settings_menu_cloudLocal.tr();
-    case AuthenticatorType.supabase:
-      return LocaleKeys.settings_menu_cloudSupabase.tr();
     case AuthenticatorType.appflowyCloud:
       return LocaleKeys.settings_menu_cloudAppFlowy.tr();
     case AuthenticatorType.appflowyCloudSelfHost:

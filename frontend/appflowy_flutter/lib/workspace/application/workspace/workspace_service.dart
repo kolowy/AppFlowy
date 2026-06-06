@@ -5,16 +5,17 @@ import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/workspace.pb.dart';
 import 'package:appflowy_result/appflowy_result.dart';
+import 'package:fixnum/fixnum.dart' as fixnum;
 
 class WorkspaceService {
-  WorkspaceService({required this.workspaceId});
+  WorkspaceService({required this.workspaceId, required this.userId});
 
   final String workspaceId;
+  final fixnum.Int64 userId;
 
   Future<FlowyResult<ViewPB, FlowyError>> createView({
     required String name,
     required ViewSectionPB viewSection,
-    String? desc,
     int? index,
     ViewLayoutPB? layout,
     bool? setAsCurrent,
@@ -26,10 +27,6 @@ class WorkspaceService {
       ..name = name
       ..layout = layout ?? ViewLayoutPB.Document
       ..section = viewSection;
-
-    if (desc != null) {
-      payload.desc = desc;
-    }
 
     if (index != null) {
       payload.index = index;
@@ -87,7 +84,7 @@ class WorkspaceService {
     return FolderEventMoveView(payload).send();
   }
 
-  Future<FlowyResult<WorkspaceUsagePB, FlowyError>> getWorkspaceUsage() {
+  Future<FlowyResult<WorkspaceUsagePB?, FlowyError>> getWorkspaceUsage() async {
     final payload = UserWorkspaceIdPB(workspaceId: workspaceId);
     return UserEventGetWorkspaceUsage(payload).send();
   }

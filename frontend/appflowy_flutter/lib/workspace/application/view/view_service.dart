@@ -1,9 +1,15 @@
 import 'dart:async';
 
+import 'package:appflowy/plugins/document/presentation/editor_plugins/mention/mention_page_bloc.dart';
+import 'package:appflowy/plugins/trash/application/trash_service.dart';
+import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
+import 'package:appflowy_backend/log.dart';
+import 'package:appflowy_backend/protobuf/flowy-document/entities.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
 import 'package:appflowy_result/appflowy_result.dart';
+import 'package:collection/collection.dart';
 
 class ViewBackendService {
   static Future<FlowyResult<ViewPB, FlowyError>> createView({
@@ -15,7 +21,6 @@ class ViewBackendService {
 
     /// The [name] is the name of the view.
     required String name,
-    String? desc,
 
     /// The default value of [openAfterCreate] is false, meaning the view will
     /// not be opened nor set as the current view. However, if set to true, the
@@ -43,17 +48,12 @@ class ViewBackendService {
     final payload = CreateViewPayloadPB.create()
       ..parentViewId = parentViewId
       ..name = name
-      ..desc = desc ?? ""
       ..layout = layoutType
       ..setAsCurrent = openAfterCreate
       ..initialData = initialDataBytes ?? [];
 
     if (ext.isNotEmpty) {
       payload.meta.addAll(ext);
-    }
-
-    if (desc != null) {
-      payload.desc = desc;
     }
 
     if (index != null) {
@@ -87,7 +87,6 @@ class ViewBackendService {
     final payload = CreateOrphanViewPayloadPB.create()
       ..viewId = viewId
       ..name = name
-      ..desc = desc ?? ""
       ..layout = layoutType
       ..initialData = initialDataBytes ?? [];
 
@@ -112,6 +111,12 @@ class ViewBackendService {
   static Future<FlowyResult<List<ViewPB>, FlowyError>> getChildViews({
     required String viewId,
   }) {
+    if (viewId.isEmpty) {
+      return Future.value(
+        FlowyResult<List<ViewPB>, FlowyError>.success(<ViewPB>[]),
+      );
+    }
+
     final payload = ViewIdPB.create()..value = viewId;
 
     return FolderEventGetView(payload).send().then((result) {
@@ -136,7 +141,7 @@ class ViewBackendService {
     return FolderEventDeleteView(request).send();
   }
 
-  static Future<FlowyResult<void, FlowyError>> duplicate({
+  static Future<FlowyResult<ViewPB, FlowyError>> duplicate({
     required ViewPB view,
     required bool openAfterDuplicate,
     // should include children views
@@ -193,17 +198,25 @@ class ViewBackendService {
   }
 
   static Future<FlowyResult<void, FlowyError>> updateViewIcon({
-    required String viewId,
-    required String viewIcon,
-    ViewIconTypePB iconType = ViewIconTypePB.Emoji,
+    required ViewPB view,
+    required EmojiIconData viewIcon,
   }) {
-    final icon = ViewIconPB()
-      ..ty = iconType
-      ..value = viewIcon;
+    final viewId = view.id;
+    final oldIcon = view.icon.toEmojiIconData();
+    final icon = viewIcon.toViewIcon();
     final payload = UpdateViewIconPayloadPB.create()
       ..viewId = viewId
       ..icon = icon;
-
+    if (oldIcon.type == FlowyIconType.custom &&
+        viewIcon.emoji != oldIcon.emoji) {
+      DocumentEventDeleteFile(
+        DeleteFilePB(url: oldIcon.emoji),
+      ).send().onFailure((e) {
+        Log.error(
+          'updateViewIcon error while deleting :${oldIcon.emoji}, error: ${e.msg}, ${e.code}',
+        );
+      });
+    }
     return FolderEventUpdateViewIcon(payload).send();
   }
 
@@ -255,8 +268,38 @@ class ViewBackendService {
   static Future<FlowyResult<ViewPB, FlowyError>> getView(
     String viewId,
   ) async {
+    if (viewId.isEmpty) {
+      Log.error('ViewId is empty');
+    }
     final payload = ViewIdPB.create()..value = viewId;
     return FolderEventGetView(payload).send();
+  }
+
+  static Future<MentionPageStatus> getMentionPageStatus(String pageId) async {
+    final view = await ViewBackendService.getView(pageId).then(
+      (value) => value.toNullable(),
+    );
+
+    // found the page
+    if (view != null) {
+      return (view, false, false);
+    }
+
+    // if the view is not found, try to fetch from trash
+    final trashViews = await TrashService().readTrash();
+    final trash = trashViews.fold(
+      (l) => l.items.firstWhereOrNull((element) => element.id == pageId),
+      (r) => null,
+    );
+    if (trash != null) {
+      final trashView = ViewPB()
+        ..id = trash.id
+        ..name = trash.name;
+      return (trashView, true, false);
+    }
+
+    // the page was deleted
+    return (null, false, true);
   }
 
   static Future<FlowyResult<RepeatedViewPB, FlowyError>> getViewAncestors(
@@ -370,5 +413,15 @@ class ViewBackendService {
     }
 
     return (publishedPages.isNotEmpty, publishedPages);
+  }
+
+  static Future<FlowyResult<void, FlowyError>> lockView(String viewId) async {
+    final payload = ViewIdPB()..value = viewId;
+    return FolderEventLockView(payload).send();
+  }
+
+  static Future<FlowyResult<void, FlowyError>> unlockView(String viewId) async {
+    final payload = ViewIdPB()..value = viewId;
+    return FolderEventUnlockView(payload).send();
   }
 }

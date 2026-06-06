@@ -1,265 +1,297 @@
-use crate::ai_manager::AIUserService;
-use crate::entities::{ChatStatePB, ModelTypePB};
-use crate::local_ai::local_llm_chat::LocalAIController;
-use crate::notification::{make_notification, ChatNotification, APPFLOWY_AI_NOTIFICATION_KEY};
-use crate::persistence::select_single_message;
-use appflowy_plugin::error::PluginError;
+use crate::local_ai::controller::LocalAIController;
+use flowy_ai_pub::persistence::select_message_content;
+use std::collections::HashMap;
 
 use flowy_ai_pub::cloud::{
-  ChatCloudService, ChatMessage, ChatMessageType, CompletionType, LocalAIConfig, MessageCursor,
-  RelatedQuestion, RepeatedChatMessage, RepeatedRelatedQuestion, StreamAnswer, StreamComplete,
+  AIModel, ChatCloudService, ChatMessage, ChatMessageType, ChatSettings, CompleteTextParams,
+  MessageCursor, ModelList, RelatedQuestion, RepeatedChatMessage, RepeatedRelatedQuestion,
+  ResponseFormat, StreamAnswer, StreamComplete, UpdateChatParams,
 };
 use flowy_error::{FlowyError, FlowyResult};
-use futures::{stream, StreamExt, TryStreamExt};
 use lib_infra::async_trait::async_trait;
-use lib_infra::future::FutureResult;
 
-use std::path::PathBuf;
-use std::sync::Arc;
+use flowy_ai_pub::user_service::AIUserService;
+use flowy_storage_pub::storage::StorageService;
+use serde_json::Value;
+use std::path::Path;
+use std::sync::{Arc, Weak};
+use tracing::{info, trace};
+use uuid::Uuid;
 
-pub struct AICloudServiceMiddleware {
+pub struct ChatServiceMiddleware {
   cloud_service: Arc<dyn ChatCloudService>,
   user_service: Arc<dyn AIUserService>,
-  local_llm_controller: Arc<LocalAIController>,
+  local_ai: Arc<LocalAIController>,
+  #[allow(dead_code)]
+  storage_service: Weak<dyn StorageService>,
 }
 
-impl AICloudServiceMiddleware {
+impl ChatServiceMiddleware {
   pub fn new(
     user_service: Arc<dyn AIUserService>,
     cloud_service: Arc<dyn ChatCloudService>,
-    local_llm_controller: Arc<LocalAIController>,
+    local_ai: Arc<LocalAIController>,
+    storage_service: Weak<dyn StorageService>,
   ) -> Self {
     Self {
       user_service,
       cloud_service,
-      local_llm_controller,
+      local_ai,
+      storage_service,
     }
   }
 
   fn get_message_content(&self, message_id: i64) -> FlowyResult<String> {
     let uid = self.user_service.user_id()?;
     let conn = self.user_service.sqlite_connection(uid)?;
-    let content = select_single_message(conn, message_id)?
-      .map(|data| data.content)
-      .ok_or_else(|| {
-        FlowyError::record_not_found().with_context(format!("Message not found: {}", message_id))
-      })?;
-
+    let content = select_message_content(conn, message_id)?.ok_or_else(|| {
+      FlowyError::record_not_found().with_context(format!("Message not found: {}", message_id))
+    })?;
     Ok(content)
-  }
-
-  fn handle_plugin_error(&self, err: PluginError) {
-    if matches!(
-      err,
-      PluginError::PluginNotConnected | PluginError::PeerDisconnect
-    ) {
-      make_notification(
-        APPFLOWY_AI_NOTIFICATION_KEY,
-        ChatNotification::UpdateChatPluginState,
-      )
-      .payload(ChatStatePB {
-        model_type: ModelTypePB::LocalAI,
-        available: false,
-      })
-      .send();
-    }
   }
 }
 
 #[async_trait]
-impl ChatCloudService for AICloudServiceMiddleware {
-  fn create_chat(
+impl ChatCloudService for ChatServiceMiddleware {
+  async fn create_chat(
     &self,
     uid: &i64,
-    workspace_id: &str,
-    chat_id: &str,
-  ) -> FutureResult<(), FlowyError> {
-    self.cloud_service.create_chat(uid, workspace_id, chat_id)
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+    rag_ids: Vec<Uuid>,
+    name: &str,
+    metadata: serde_json::Value,
+  ) -> Result<(), FlowyError> {
+    self
+      .cloud_service
+      .create_chat(uid, workspace_id, chat_id, rag_ids, name, metadata)
+      .await
   }
 
-  fn save_question(
+  async fn create_question(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
     message: &str,
     message_type: ChatMessageType,
-  ) -> FutureResult<ChatMessage, FlowyError> {
+    prompt_id: Option<String>,
+  ) -> Result<ChatMessage, FlowyError> {
     self
       .cloud_service
-      .save_question(workspace_id, chat_id, message, message_type)
+      .create_question(workspace_id, chat_id, message, message_type, prompt_id)
+      .await
   }
 
-  fn save_answer(
+  async fn create_answer(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
     message: &str,
     question_id: i64,
-  ) -> FutureResult<ChatMessage, FlowyError> {
+    metadata: Option<serde_json::Value>,
+  ) -> Result<ChatMessage, FlowyError> {
     self
       .cloud_service
-      .save_answer(workspace_id, chat_id, message, question_id)
+      .create_answer(workspace_id, chat_id, message, question_id, metadata)
+      .await
   }
 
-  async fn ask_question(
+  async fn stream_answer(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
-    message_id: i64,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+    question_id: i64,
+    format: ResponseFormat,
+    ai_model: AIModel,
   ) -> Result<StreamAnswer, FlowyError> {
-    if self.local_llm_controller.is_running() {
-      let content = self.get_message_content(message_id)?;
-      match self
-        .local_llm_controller
-        .stream_question(chat_id, &content)
-        .await
-      {
-        Ok(stream) => Ok(
-          stream
-            .map_err(|err| FlowyError::local_ai().with_context(err))
-            .boxed(),
-        ),
-        Err(err) => {
-          self.handle_plugin_error(err);
-          Ok(stream::once(async { Err(FlowyError::local_ai_unavailable()) }).boxed())
-        },
+    info!("stream_answer use model: {:?}", ai_model);
+    if ai_model.is_local {
+      if self.local_ai.is_ready().await {
+        let content = self.get_message_content(question_id)?;
+        self
+          .local_ai
+          .stream_question(chat_id, &content, format, &ai_model.name)
+          .await
+      } else {
+        Err(FlowyError::local_ai_not_ready())
       }
     } else {
       self
         .cloud_service
-        .ask_question(workspace_id, chat_id, message_id)
+        .stream_answer(workspace_id, chat_id, question_id, format, ai_model)
         .await
     }
   }
 
-  async fn generate_answer(
+  async fn get_answer(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
-    question_message_id: i64,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+    question_id: i64,
   ) -> Result<ChatMessage, FlowyError> {
-    if self.local_llm_controller.is_running() {
-      let content = self.get_message_content(question_message_id)?;
-      match self
-        .local_llm_controller
-        .ask_question(chat_id, &content)
-        .await
-      {
-        Ok(answer) => {
-          let message = self
-            .cloud_service
-            .save_answer(workspace_id, chat_id, &answer, question_message_id)
-            .await?;
-          Ok(message)
-        },
-        Err(err) => {
-          self.handle_plugin_error(err);
-          Err(FlowyError::local_ai_unavailable())
-        },
-      }
+    if self.local_ai.is_ready().await {
+      let content = self.get_message_content(question_id)?;
+      let answer = self.local_ai.ask_question(chat_id, &content).await?;
+
+      let message = self
+        .cloud_service
+        .create_answer(workspace_id, chat_id, &answer, question_id, None)
+        .await?;
+      Ok(message)
     } else {
       self
         .cloud_service
-        .generate_answer(workspace_id, chat_id, question_message_id)
+        .get_answer(workspace_id, chat_id, question_id)
         .await
     }
   }
 
-  fn get_chat_messages(
+  async fn get_chat_messages(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
     offset: MessageCursor,
     limit: u64,
-  ) -> FutureResult<RepeatedChatMessage, FlowyError> {
+  ) -> Result<RepeatedChatMessage, FlowyError> {
     self
       .cloud_service
       .get_chat_messages(workspace_id, chat_id, offset, limit)
+      .await
+  }
+
+  async fn get_question_from_answer_id(
+    &self,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+    answer_message_id: i64,
+  ) -> Result<ChatMessage, FlowyError> {
+    self
+      .cloud_service
+      .get_question_from_answer_id(workspace_id, chat_id, answer_message_id)
+      .await
   }
 
   async fn get_related_message(
     &self,
-    workspace_id: &str,
-    chat_id: &str,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
     message_id: i64,
+    ai_model: AIModel,
   ) -> Result<RepeatedRelatedQuestion, FlowyError> {
-    if self.local_llm_controller.is_running() {
-      let questions = self
-        .local_llm_controller
-        .get_related_question(chat_id)
-        .await
-        .map_err(|err| FlowyError::local_ai().with_context(err))?
-        .into_iter()
-        .map(|content| RelatedQuestion {
-          content,
-          metadata: None,
-        })
-        .collect::<Vec<_>>();
+    if ai_model.is_local {
+      if self.local_ai.is_ready().await {
+        let questions = self
+          .local_ai
+          .get_related_question(&ai_model.name, chat_id, message_id)
+          .await?;
+        trace!("LocalAI related questions: {:?}", questions);
+        let items = questions
+          .into_iter()
+          .map(|content| RelatedQuestion {
+            content,
+            metadata: None,
+          })
+          .collect::<Vec<_>>();
 
-      Ok(RepeatedRelatedQuestion {
-        message_id,
-        items: questions,
-      })
+        Ok(RepeatedRelatedQuestion { message_id, items })
+      } else {
+        Ok(RepeatedRelatedQuestion {
+          message_id,
+          items: vec![],
+        })
+      }
     } else {
       self
         .cloud_service
-        .get_related_message(workspace_id, chat_id, message_id)
+        .get_related_message(workspace_id, chat_id, message_id, ai_model)
         .await
     }
   }
 
   async fn stream_complete(
     &self,
-    workspace_id: &str,
-    text: &str,
-    complete_type: CompletionType,
+    workspace_id: &Uuid,
+    params: CompleteTextParams,
+    ai_model: AIModel,
   ) -> Result<StreamComplete, FlowyError> {
-    if self.local_llm_controller.is_running() {
-      match self
-        .local_llm_controller
-        .complete_text(text, complete_type as u8)
-        .await
-      {
-        Ok(stream) => Ok(
-          stream
-            .map_err(|err| FlowyError::local_ai().with_context(err))
-            .boxed(),
-        ),
-        Err(err) => {
-          self.handle_plugin_error(err);
-          Ok(stream::once(async { Err(FlowyError::local_ai_unavailable()) }).boxed())
-        },
+    info!("stream_complete use custom model: {:?}", ai_model);
+    if ai_model.is_local {
+      if self.local_ai.is_ready().await {
+        self.local_ai.complete_text(&ai_model.name, params).await
+      } else {
+        Err(FlowyError::local_ai_not_ready())
       }
     } else {
       self
         .cloud_service
-        .stream_complete(workspace_id, text, complete_type)
+        .stream_complete(workspace_id, params, ai_model)
         .await
     }
   }
 
-  async fn index_file(
+  async fn embed_file(
     &self,
-    workspace_id: &str,
-    file_path: PathBuf,
-    chat_id: &str,
+    workspace_id: &Uuid,
+    file_path: &Path,
+    chat_id: &Uuid,
+    metadata: Option<HashMap<String, Value>>,
   ) -> Result<(), FlowyError> {
-    if self.local_llm_controller.is_running() {
+    if self.local_ai.is_ready().await {
       self
-        .local_llm_controller
-        .index_file(chat_id, file_path)
-        .await
-        .map_err(|err| FlowyError::local_ai().with_context(err))?;
+        .local_ai
+        .embed_file(chat_id, file_path.to_path_buf(), metadata)
+        .await?;
       Ok(())
     } else {
       self
         .cloud_service
-        .index_file(workspace_id, file_path, chat_id)
+        .embed_file(workspace_id, file_path, chat_id, metadata)
         .await
     }
   }
 
-  async fn get_local_ai_config(&self, workspace_id: &str) -> Result<LocalAIConfig, FlowyError> {
-    self.cloud_service.get_local_ai_config(workspace_id).await
+  async fn get_chat_settings(
+    &self,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+  ) -> Result<ChatSettings, FlowyError> {
+    self
+      .cloud_service
+      .get_chat_settings(workspace_id, chat_id)
+      .await
+  }
+
+  async fn update_chat_settings(
+    &self,
+    workspace_id: &Uuid,
+    chat_id: &Uuid,
+    params: UpdateChatParams,
+  ) -> Result<(), FlowyError> {
+    self
+      .cloud_service
+      .update_chat_settings(workspace_id, chat_id, params)
+      .await
+  }
+
+  async fn get_available_models(&self, workspace_id: &Uuid) -> Result<ModelList, FlowyError> {
+    self.cloud_service.get_available_models(workspace_id).await
+  }
+
+  async fn get_workspace_default_model(&self, workspace_id: &Uuid) -> Result<String, FlowyError> {
+    self
+      .cloud_service
+      .get_workspace_default_model(workspace_id)
+      .await
+  }
+
+  async fn set_workspace_default_model(
+    &self,
+    workspace_id: &Uuid,
+    model: &str,
+  ) -> Result<(), FlowyError> {
+    self
+      .cloud_service
+      .set_workspace_default_model(workspace_id, model)
+      .await
   }
 }

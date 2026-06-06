@@ -1,8 +1,9 @@
 {
   "$schema": "https://inlang.com/schema/project-settings",
-  "sourceLanguageTag": "en",
+  "sourceLanguageTag": "en-US",
   "languageTags": [
-    "en",
+    "en-US",
+    "en-GB",
     "ar-SA",
     "ca-ES",
     "ckb-KU",
@@ -13,6 +14,7 @@
     "fa",
     "fr-CA",
     "fr-FR",
+    "ga-IE",
     "he",
     "hu-HU",
     "id-ID",
@@ -24,6 +26,7 @@
     "pt-PT",
     "ru-RU",
     "sv-SE",
+    "th-TH",
     "tr-TR",
     "uk-UA",
     "vi",

@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 const _overlayContainerPadding = EdgeInsets.symmetric(vertical: 12);
@@ -51,16 +49,14 @@ class FlowyDialog extends StatelessWidget {
       backgroundColor: backgroundColor ?? Theme.of(context).cardColor,
       title: title,
       shape: shape ??
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAliasWithSaveLayer,
       children: [
         Material(
           type: MaterialType.transparency,
           child: Container(
             height: expandHeight ? size.height : null,
-            width: width ??
-                max(min(size.width, overlayContainerMaxWidth),
-                    overlayContainerMinWidth),
+            width: width ?? size.width,
             constraints: constraints,
             child: child,
           ),

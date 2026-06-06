@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use collab_document::blocks::{Block, BlockAction, BlockActionPayload, BlockActionType};
-use collab_document::document_data::{default_document_data, PARAGRAPH_BLOCK_TYPE};
+use collab_document::document_data::{PARAGRAPH_BLOCK_TYPE, default_document_data};
 
-use crate::document::util::{gen_document_id, gen_id, DocumentTest};
+use crate::document::util::{DocumentTest, gen_document_id, gen_id};
 
 #[tokio::test]
 async fn undo_redo_test() {
   let test = DocumentTest::new();
 
-  let doc_id: String = gen_document_id();
-  let data = default_document_data(&doc_id);
+  let doc_id = gen_document_id();
+  let data = default_document_data(&doc_id.to_string());
 
   // create a document
   _ = test
@@ -23,8 +23,8 @@ async fn undo_redo_test() {
 
   // open a document
   test.open_document(&doc_id).await.unwrap();
-  let document = test.get_document(&doc_id).await.unwrap();
-  let document = document.lock();
+  let document = test.editable_document(&doc_id).await.unwrap();
+  let mut document = document.write().await;
   let page_block = document.get_block(&data.page_id).unwrap();
   let page_id = page_block.id;
   let text_block_id = gen_id();
@@ -49,7 +49,7 @@ async fn undo_redo_test() {
       text_id: None,
     },
   };
-  document.apply_action(vec![insert_text_action]);
+  document.apply_action(vec![insert_text_action]).unwrap();
 
   let can_undo = document.can_undo();
   assert!(can_undo);

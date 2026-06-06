@@ -1,3 +1,4 @@
+import 'package:appflowy/plugins/document/presentation/editor_plugins/base/markdown_text_robot.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,40 +9,51 @@ class NumberedListIcon extends StatelessWidget {
     super.key,
     required this.node,
     required this.textDirection,
+    this.textStyle,
   });
 
   final Node node;
   final TextDirection textDirection;
+  final TextStyle? textStyle;
 
   @override
   Widget build(BuildContext context) {
-    final textStyle =
+    final textStyleConfiguration =
         context.read<EditorState>().editorStyle.textStyleConfiguration;
-    final fontSize = textStyle.text.fontSize ?? 16.0;
-    final height = textStyle.text.height ?? textStyle.lineHeight;
-    final size = fontSize * height;
-    return Container(
-      constraints: BoxConstraints(
-        minWidth: size,
-        minHeight: size,
-      ),
-      margin: const EdgeInsets.only(right: 8.0),
-      alignment: Alignment.center,
-      child: Center(
-        child: Text(
-          node.levelString,
-          style: textStyle.text,
-          strutStyle: StrutStyle.fromTextStyle(textStyle.text),
-          textDirection: textDirection,
+    final height =
+        textStyleConfiguration.text.height ?? textStyleConfiguration.lineHeight;
+    final combinedTextStyle = textStyle?.combine(textStyleConfiguration.text) ??
+        textStyleConfiguration.text;
+    final adjustedTextStyle = combinedTextStyle.copyWith(
+      height: height,
+      fontFeatures: [const FontFeature.tabularFigures()],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 6.0, right: 10.0),
+      child: Text(
+        node.buildLevelString(context),
+        style: adjustedTextStyle,
+        strutStyle: StrutStyle.fromTextStyle(combinedTextStyle),
+        textHeightBehavior: TextHeightBehavior(
+          applyHeightToFirstAscent:
+              textStyleConfiguration.applyHeightToFirstAscent,
+          applyHeightToLastDescent:
+              textStyleConfiguration.applyHeightToLastDescent,
+          leadingDistribution: textStyleConfiguration.leadingDistribution,
         ),
+        textDirection: textDirection,
       ),
     );
   }
 }
 
-extension on Node {
-  String get levelString {
-    final builder = _NumberedListIconBuilder(node: this);
+extension NumberedListNodeIndex on Node {
+  String buildLevelString(BuildContext context) {
+    final builder = NumberedListIndexBuilder(
+      editorState: context.read<EditorState>(),
+      node: this,
+    );
     final indexInRootLevel = builder.indexInRootLevel;
     final indexInSameLevel = builder.indexInSameLevel;
     final level = indexInRootLevel % 3;
@@ -54,11 +66,13 @@ extension on Node {
   }
 }
 
-class _NumberedListIconBuilder {
-  _NumberedListIconBuilder({
+class NumberedListIndexBuilder {
+  NumberedListIndexBuilder({
+    required this.editorState,
     required this.node,
   });
 
+  final EditorState editorState;
   final Node node;
 
   // the level of the current node
@@ -80,7 +94,13 @@ class _NumberedListIconBuilder {
     Node? previous = node.previous;
 
     // if the previous one is not a numbered list, then it is the first one
-    if (previous == null || previous.type != NumberedListBlockKeys.type) {
+    final aiNodeExternalValues =
+        node.externalValues?.unwrapOrNull<AINodeExternalValues>();
+
+    if (previous == null ||
+        previous.type != NumberedListBlockKeys.type ||
+        (aiNodeExternalValues != null &&
+            aiNodeExternalValues.isFirstNumberedListNode)) {
       return node.attributes[NumberedListBlockKeys.number] ?? level;
     }
 
@@ -89,10 +109,17 @@ class _NumberedListIconBuilder {
       startNumber = previous.attributes[NumberedListBlockKeys.number] as int?;
       level++;
       previous = previous.previous;
+
+      // break the loop if the start number is found when the current node is an AI node
+      if (aiNodeExternalValues != null && startNumber != null) {
+        return startNumber + level - 1;
+      }
     }
+
     if (startNumber != null) {
-      return startNumber + level - 1;
+      level = startNumber + level - 1;
     }
+
     return level;
   }
 }

@@ -1,13 +1,11 @@
-import 'package:flutter/foundation.dart';
-
 import 'package:appflowy/user/application/user_listener.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
-import 'package:appflowy_backend/protobuf/flowy-user/auth.pbenum.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/user_profile.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/workspace.pb.dart';
 import 'package:appflowy_result/appflowy_result.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -22,6 +20,7 @@ enum SettingsPage {
   ai,
   plan,
   billing,
+  sites,
   // OLD
   notifications,
   cloud,
@@ -32,16 +31,15 @@ enum SettingsPage {
 class SettingsDialogBloc
     extends Bloc<SettingsDialogEvent, SettingsDialogState> {
   SettingsDialogBloc(
-    this.userProfile,
-    this.workspaceMember, {
+    UserProfilePB userProfile,
+    this.currentWorkspaceMemberRole, {
     SettingsPage? initPage,
   })  : _userListener = UserListener(userProfile: userProfile),
         super(SettingsDialogState.initial(userProfile, initPage)) {
     _dispatch();
   }
 
-  final UserProfilePB userProfile;
-  final WorkspaceMemberPB? workspaceMember;
+  final AFRolePB? currentWorkspaceMemberRole;
   final UserListener _userListener;
 
   @override
@@ -57,8 +55,10 @@ class SettingsDialogBloc
           initial: () async {
             _userListener.start(onProfileUpdated: _profileUpdated);
 
-            final isBillingEnabled =
-                await _isBillingEnabled(userProfile, workspaceMember);
+            final isBillingEnabled = await _isBillingEnabled(
+              state.userProfile,
+              currentWorkspaceMemberRole,
+            );
             if (isBillingEnabled) {
               emit(state.copyWith(isBillingEnabled: true));
             }
@@ -78,24 +78,27 @@ class SettingsDialogBloc
     FlowyResult<UserProfilePB, FlowyError> userProfileOrFailed,
   ) {
     userProfileOrFailed.fold(
-      (newUserProfile) =>
-          add(SettingsDialogEvent.didReceiveUserProfile(newUserProfile)),
+      (newUserProfile) {
+        if (!isClosed) {
+          add(SettingsDialogEvent.didReceiveUserProfile(newUserProfile));
+        }
+      },
       (err) => Log.error(err),
     );
   }
 
   Future<bool> _isBillingEnabled(
     UserProfilePB userProfile, [
-    WorkspaceMemberPB? member,
+    AFRolePB? currentWorkspaceMemberRole,
   ]) async {
     if ([
-      AuthenticatorPB.Local,
-      AuthenticatorPB.Supabase,
-    ].contains(userProfile.authenticator)) {
+      WorkspaceTypePB.LocalW,
+    ].contains(userProfile.workspaceType)) {
       return false;
     }
 
-    if (member == null || member.role != AFRolePB.Owner) {
+    if (currentWorkspaceMemberRole == null ||
+        currentWorkspaceMemberRole != AFRolePB.Owner) {
       return false;
     }
 

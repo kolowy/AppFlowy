@@ -41,8 +41,10 @@ class InlineActionsGroup extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          FlowyText.medium(result.title, color: style.groupTextColor),
-          const SizedBox(height: 4),
+          if (result.title != null) ...[
+            FlowyText.medium(result.title!, color: style.groupTextColor),
+            const SizedBox(height: 4),
+          ],
           ...result.results.mapIndexed(
             (index, item) => InlineActionsWidget(
               item: item,
@@ -90,6 +92,8 @@ class InlineActionsWidget extends StatefulWidget {
 class _InlineActionsWidgetState extends State<InlineActionsWidget> {
   @override
   Widget build(BuildContext context) {
+    final iconBuilder = widget.item.iconBuilder;
+    final hasIcon = iconBuilder != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: SizedBox(
@@ -97,10 +101,20 @@ class _InlineActionsWidgetState extends State<InlineActionsWidget> {
         child: FlowyButton(
           expand: true,
           isSelected: widget.isSelected,
-          leftIcon: widget.item.icon?.call(widget.isSelected),
-          text: FlowyText.regular(
-            widget.item.label,
-            figmaLineHeight: 18,
+          text: Row(
+            children: [
+              if (hasIcon) ...[
+                iconBuilder.call(widget.isSelected),
+                SizedBox(width: 12),
+              ],
+              Flexible(
+                child: FlowyText.regular(
+                  widget.item.label,
+                  figmaLineHeight: 18,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           onTap: _onPressed,
         ),

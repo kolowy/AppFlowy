@@ -1,9 +1,8 @@
-import 'dart:io';
-
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/shared/colors.dart';
+import 'package:appflowy/shared/flowy_error_page.dart';
+import 'package:appflowy/shared/loading.dart';
 import 'package:appflowy/util/int64_extension.dart';
 import 'package:appflowy/util/theme_extension.dart';
 import 'package:appflowy/workspace/application/settings/appearance/appearance_cubit.dart';
@@ -21,10 +20,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/size.dart';
 import 'package:flowy_infra/theme_extension.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
-import 'package:flowy_infra_ui/widget/error_page.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
-import '../../../../plugins/document/presentation/editor_plugins/openai/widgets/loading.dart';
 
 class SettingsPlanView extends StatefulWidget {
   const SettingsPlanView({
@@ -76,9 +73,10 @@ class _SettingsPlanViewState extends State<SettingsPlanView> {
               if (state.error != null) {
                 return Padding(
                   padding: const EdgeInsets.all(16),
-                  child: FlowyErrorPage.message(
-                    state.error!.msg,
-                    howToFix: LocaleKeys.errorDialog_howToFixFallback.tr(),
+                  child: Center(
+                    child: AppFlowyErrorPage(
+                      error: state.error!,
+                    ),
                   ),
                 );
               }
@@ -121,11 +119,7 @@ class _SettingsPlanViewState extends State<SettingsPlanView> {
                         priceInfo: LocaleKeys
                             .settings_planPage_planUsage_addons_aiMax_priceInfo
                             .tr(),
-                        billingInfo: LocaleKeys
-                            .settings_planPage_planUsage_addons_aiMax_billingInfo
-                            .tr(
-                          args: [SubscriptionPlanPB.AiMax.priceMonthBilling],
-                        ),
+                        recommend: '',
                         buttonText: state.subscriptionInfo.hasAIMax
                             ? LocaleKeys
                                 .settings_planPage_planUsage_addons_activeLabel
@@ -138,46 +132,6 @@ class _SettingsPlanViewState extends State<SettingsPlanView> {
                       ),
                     ),
                     const HSpace(8),
-
-                    // Currently, the AI Local tile is only available on macOS
-                    // TODO(nathan): enable windows and linux
-                    if (Platform.isMacOS)
-                      Flexible(
-                        child: _AddOnBox(
-                          title: LocaleKeys
-                              .settings_planPage_planUsage_addons_aiOnDevice_title
-                              .tr(),
-                          description: LocaleKeys
-                              .settings_planPage_planUsage_addons_aiOnDevice_description
-                              .tr(),
-                          price: LocaleKeys
-                              .settings_planPage_planUsage_addons_aiOnDevice_price
-                              .tr(
-                            args: [
-                              SubscriptionPlanPB.AiLocal.priceAnnualBilling,
-                            ],
-                          ),
-                          priceInfo: LocaleKeys
-                              .settings_planPage_planUsage_addons_aiOnDevice_priceInfo
-                              .tr(),
-                          billingInfo: LocaleKeys
-                              .settings_planPage_planUsage_addons_aiOnDevice_billingInfo
-                              .tr(
-                            args: [
-                              SubscriptionPlanPB.AiLocal.priceMonthBilling,
-                            ],
-                          ),
-                          buttonText: state.subscriptionInfo.hasAIOnDevice
-                              ? LocaleKeys
-                                  .settings_planPage_planUsage_addons_activeLabel
-                                  .tr()
-                              : LocaleKeys
-                                  .settings_planPage_planUsage_addons_addLabel
-                                  .tr(),
-                          isActive: state.subscriptionInfo.hasAIOnDevice,
-                          plan: SubscriptionPlanPB.AiLocal,
-                        ),
-                      ),
                   ],
                 ),
               ],
@@ -431,28 +385,11 @@ class _PlanUsageSummary extends StatelessWidget {
                 value: false,
                 label: LocaleKeys.settings_planPage_planUsage_aiMaxToggle.tr(),
                 badgeLabel:
-                    LocaleKeys.settings_planPage_planUsage_aiMaxBadge.tr(),
+                    LocaleKeys.settings_planPage_planUsage_proBadge.tr(),
                 onTap: () async {
                   context.read<SettingsPlanBloc>().add(
                         const SettingsPlanEvent.addSubscription(
                           SubscriptionPlanPB.AiMax,
-                        ),
-                      );
-                  await Future.delayed(const Duration(seconds: 2), () {});
-                },
-              ),
-            ],
-            if (!subscriptionInfo.hasAIOnDevice) ...[
-              _ToggleMore(
-                value: false,
-                label: LocaleKeys.settings_planPage_planUsage_aiOnDeviceToggle
-                    .tr(),
-                badgeLabel:
-                    LocaleKeys.settings_planPage_planUsage_aiOnDeviceBadge.tr(),
-                onTap: () async {
-                  context.read<SettingsPlanBloc>().add(
-                        const SettingsPlanEvent.addSubscription(
-                          SubscriptionPlanPB.AiLocal,
                         ),
                       );
                   await Future.delayed(const Duration(seconds: 2), () {});
@@ -544,12 +481,6 @@ class _ToggleMoreState extends State<_ToggleMore> {
 
   @override
   Widget build(BuildContext context) {
-    final isLM = Theme.of(context).isLightMode;
-    final primaryColor =
-        isLM ? const Color(0xFF653E8C) : const Color(0xFFE8E2EE);
-    final secondaryColor =
-        isLM ? const Color(0xFFE8E2EE) : const Color(0xFF653E8C);
-
     return Row(
       children: [
         Toggle(
@@ -580,11 +511,11 @@ class _ToggleMoreState extends State<_ToggleMore> {
             height: 26,
             child: Badge(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              backgroundColor: secondaryColor,
+              backgroundColor: context.proSecondaryColor,
               label: FlowyText.semibold(
                 widget.badgeLabel!,
                 fontSize: 12,
-                color: primaryColor,
+                color: context.proPrimaryColor,
               ),
             ),
           ),
@@ -612,8 +543,8 @@ class _PlanProgressIndicator extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               color: AFThemeExtension.of(context).progressBarBGColor,
               border: Border.all(
-                color: const Color(0xFFDDF1F7).withOpacity(
-                  theme.brightness == Brightness.light ? 1 : 0.1,
+                color: const Color(0xFFDDF1F7).withValues(
+                  alpha: theme.brightness == Brightness.light ? 1 : 0.1,
                 ),
               ),
             ),
@@ -654,7 +585,7 @@ class _AddOnBox extends StatelessWidget {
     required this.description,
     required this.price,
     required this.priceInfo,
-    required this.billingInfo,
+    required this.recommend,
     required this.buttonText,
     required this.isActive,
     required this.plan,
@@ -664,7 +595,7 @@ class _AddOnBox extends StatelessWidget {
   final String description;
   final String price;
   final String priceInfo;
-  final String billingInfo;
+  final String recommend;
   final String buttonText;
   final bool isActive;
   final SubscriptionPlanPB plan;
@@ -683,7 +614,7 @@ class _AddOnBox extends StatelessWidget {
         border: Border.all(
           color: isActive ? const Color(0xFFBDBDBD) : const Color(0xFF9C00FB),
         ),
-        color: const Color(0xFFF7F8FC).withOpacity(0.05),
+        color: const Color(0xFFF7F8FC).withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -717,7 +648,7 @@ class _AddOnBox extends StatelessWidget {
             children: [
               Expanded(
                 child: FlowyText(
-                  billingInfo,
+                  recommend,
                   color: AFThemeExtension.of(context).secondaryTextColor,
                   fontSize: 11,
                   maxLines: 2,

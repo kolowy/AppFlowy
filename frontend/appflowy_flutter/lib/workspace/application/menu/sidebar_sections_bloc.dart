@@ -76,11 +76,10 @@ class SidebarSectionsBloc
               );
             }
           },
-          createRootViewInSection: (name, section, desc, index) async {
+          createRootViewInSection: (name, section, index) async {
             final result = await _workspaceService.createView(
               name: name,
               viewSection: section,
-              desc: desc,
               index: index,
             );
             result.fold(
@@ -245,7 +244,10 @@ class SidebarSectionsBloc
   }
 
   void _initial(UserProfilePB userProfile, String workspaceId) {
-    _workspaceService = WorkspaceService(workspaceId: workspaceId);
+    _workspaceService = WorkspaceService(
+      workspaceId: workspaceId,
+      userId: userProfile.id,
+    );
 
     _listener = WorkspaceSectionsListener(
       user: userProfile,
@@ -283,7 +285,6 @@ class SidebarSectionsEvent with _$SidebarSectionsEvent {
   const factory SidebarSectionsEvent.createRootViewInSection({
     required String name,
     required ViewSectionPB viewSection,
-    String? desc,
     int? index,
   }) = _CreateRootViewInSection;
   const factory SidebarSectionsEvent.moveRootView({

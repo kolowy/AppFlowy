@@ -43,7 +43,7 @@ void main() {
     );
     await boardResponseFuture();
 
-    bloc.add(DateCellEditorEvent.selectDay(DateTime.now()));
+    bloc.add(DateCellEditorEvent.updateDateTime(DateTime.now()));
     await boardResponseFuture();
 
     final gridGroupBloc = DatabaseGroupBloc(
@@ -89,7 +89,7 @@ void main() {
     );
     await boardResponseFuture();
 
-    bloc.add(DateCellEditorEvent.selectDay(DateTime.now()));
+    bloc.add(DateCellEditorEvent.updateDateTime(DateTime.now()));
     await boardResponseFuture();
 
     final gridGroupBloc = DatabaseGroupBloc(
@@ -109,7 +109,8 @@ void main() {
 
     assert(boardBloc.groupControllers.values.length == 2);
     assert(
-      boardBloc.boardController.groupDatas.last.headerData.groupName == "2024",
+      boardBloc.boardController.groupDatas.last.headerData.groupName ==
+          DateTime.now().year.toString(),
     );
   });
 }

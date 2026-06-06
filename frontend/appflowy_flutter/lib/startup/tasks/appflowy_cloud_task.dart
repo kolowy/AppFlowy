@@ -1,69 +1,78 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-
 import 'package:app_links/app_links.dart';
 import 'package:appflowy/env/cloud_env.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/startup/tasks/app_widget.dart';
-import 'package:appflowy/startup/tasks/supabase_task.dart';
+import 'package:appflowy/startup/tasks/deeplink/deeplink_handler.dart';
+import 'package:appflowy/startup/tasks/deeplink/expire_login_deeplink_handler.dart';
+import 'package:appflowy/startup/tasks/deeplink/invitation_deeplink_handler.dart';
+import 'package:appflowy/startup/tasks/deeplink/login_deeplink_handler.dart';
+import 'package:appflowy/startup/tasks/deeplink/open_app_deeplink_handler.dart';
+import 'package:appflowy/startup/tasks/deeplink/payment_deeplink_handler.dart';
 import 'package:appflowy/user/application/auth/auth_error.dart';
-import 'package:appflowy/user/application/auth/auth_service.dart';
-import 'package:appflowy/user/application/auth/device_id.dart';
 import 'package:appflowy/user/application/user_auth_listener.dart';
-import 'package:appflowy/workspace/application/subscription_success_listenable/subscription_success_listenable.dart';
-import 'package:appflowy/workspace/presentation/home/toast.dart';
-import 'package:appflowy_backend/dispatch/dispatch.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_backend/log.dart';
-import 'package:appflowy_backend/protobuf/flowy-error/code.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:appflowy_result/appflowy_result.dart';
+import 'package:flutter/material.dart';
 import 'package:url_protocol/url_protocol.dart';
+
+const appflowyDeepLinkSchema = 'appflowy-flutter';
 
 class AppFlowyCloudDeepLink {
   AppFlowyCloudDeepLink() {
-    if (_deeplinkSubscription == null) {
-      _deeplinkSubscription = _appLinks.uriLinkStream.listen(
-        (Uri? uri) async {
-          Log.info('onDeepLink: ${uri.toString()}');
-          await _handleUri(uri);
-        },
-        onError: (Object err, StackTrace stackTrace) {
-          Log.error('on DeepLink stream error: ${err.toString()}', stackTrace);
-          _deeplinkSubscription?.cancel();
-          _deeplinkSubscription = null;
-        },
-      );
-      if (Platform.isWindows) {
-        // register deep link for Windows
-        registerProtocolHandler(appflowyDeepLinkSchema);
-      }
-    } else {
-      _deeplinkSubscription?.resume();
+    _deepLinkHandlerRegistry = DeepLinkHandlerRegistry.instance
+      ..register(LoginDeepLinkHandler())
+      ..register(PaymentDeepLinkHandler())
+      ..register(InvitationDeepLinkHandler())
+      ..register(ExpireLoginDeepLinkHandler())
+      ..register(OpenAppDeepLinkHandler());
+
+    _deepLinkSubscription = _AppLinkWrapper.instance.listen(
+      (Uri? uri) async {
+        Log.info('onDeepLink: ${uri.toString()}');
+        await _handleUri(uri);
+      },
+      onError: (Object err, StackTrace stackTrace) {
+        Log.error('on DeepLink stream error: ${err.toString()}', stackTrace);
+        _deepLinkSubscription.cancel();
+      },
+    );
+    if (Platform.isWindows) {
+      // register deep link for Windows
+      registerProtocolHandler(appflowyDeepLinkSchema);
     }
   }
 
-  final _appLinks = AppLinks();
-
   ValueNotifier<DeepLinkResult?>? _stateNotifier = ValueNotifier(null);
+
   Completer<FlowyResult<UserProfilePB, FlowyError>>? _completer;
 
-  // The AppLinks is a singleton, so we need to cancel the previous subscription
-  // before creating a new one.
-  static StreamSubscription<Uri?>? _deeplinkSubscription;
+  set completer(Completer<FlowyResult<UserProfilePB, FlowyError>>? value) {
+    Log.debug('AppFlowyCloudDeepLink: $hashCode completer');
+    _completer = value;
+  }
+
+  late final StreamSubscription<Uri?> _deepLinkSubscription;
+  late final DeepLinkHandlerRegistry _deepLinkHandlerRegistry;
 
   Future<void> dispose() async {
-    _deeplinkSubscription?.pause();
+    Log.debug('AppFlowyCloudDeepLink: $hashCode dispose');
+    await _deepLinkSubscription.cancel();
+
     _stateNotifier?.dispose();
     _stateNotifier = null;
+    completer = null;
   }
 
   void registerCompleter(
     Completer<FlowyResult<UserProfilePB, FlowyError>> completer,
   ) {
-    _completer = completer;
+    this.completer = completer;
   }
 
   VoidCallback subscribeDeepLinkLoadingState(
@@ -82,6 +91,13 @@ class AppFlowyCloudDeepLink {
   void unsubscribeDeepLinkLoadingState(VoidCallback listener) =>
       _stateNotifier?.removeListener(listener);
 
+  Future<void> passGotrueTokenResponse(
+    GotrueTokenResponsePB gotrueTokenResponse,
+  ) async {
+    final uri = _buildDeepLinkUri(gotrueTokenResponse);
+    await _handleUri(uri);
+  }
+
   Future<void> _handleUri(
     Uri? uri,
   ) async {
@@ -90,87 +106,122 @@ class AppFlowyCloudDeepLink {
     if (uri == null) {
       Log.error('onDeepLinkError: Unexpected empty deep link callback');
       _completer?.complete(FlowyResult.failure(AuthError.emptyDeepLink));
-      _completer = null;
+      completer = null;
       return;
     }
 
-    if (_isPaymentSuccessUri(uri)) {
-      Log.debug("Payment success deep link: ${uri.toString()}");
-      final plan = uri.queryParameters['plan'];
-      return getIt<SubscriptionSuccessListenable>().onPaymentSuccess(plan);
-    }
-
-    return _isAuthCallbackDeepLink(uri).fold(
-      (_) async {
-        final deviceId = await getDeviceId();
-        final payload = OauthSignInPB(
-          authenticator: AuthenticatorPB.AppFlowyCloud,
-          map: {
-            AuthServiceMapKeys.signInURL: uri.toString(),
-            AuthServiceMapKeys.deviceId: deviceId,
-          },
-        );
-        _stateNotifier?.value = DeepLinkResult(state: DeepLinkState.loading);
-        final result = await UserEventOauthSignIn(payload).send();
-
-        _stateNotifier?.value = DeepLinkResult(
-          state: DeepLinkState.finish,
-          result: result,
-        );
-        // If there is no completer, runAppFlowy() will be called.
-        if (_completer == null) {
-          await result.fold(
-            (_) async {
-              await runAppFlowy();
-            },
-            (err) {
-              Log.error(err);
+    await _deepLinkHandlerRegistry.processDeepLink(
+      uri: uri,
+      onStateChange: (handler, state) {
+        // only handle the login deep link
+        if (handler is LoginDeepLinkHandler) {
+          _stateNotifier?.value = DeepLinkResult(state: state);
+        }
+      },
+      onResult: (handler, result) async {
+        if (handler is LoginDeepLinkHandler &&
+            result is FlowyResult<UserProfilePB, FlowyError>) {
+          // If there is no completer, runAppFlowy() will be called.
+          if (_completer == null) {
+            await result.fold(
+              (_) async {
+                await runAppFlowy();
+              },
+              (err) {
+                Log.error(err);
+                final context = AppGlobals.rootNavKey.currentState?.context;
+                if (context != null) {
+                  showToastNotification(
+                    message: err.msg,
+                  );
+                }
+              },
+            );
+          } else {
+            _completer?.complete(result);
+            completer = null;
+          }
+        } else if (handler is ExpireLoginDeepLinkHandler) {
+          result.onFailure(
+            (error) {
               final context = AppGlobals.rootNavKey.currentState?.context;
               if (context != null) {
-                showSnackBarMessage(
-                  context,
-                  err.msg,
+                showToastNotification(
+                  message: error.msg,
+                  type: ToastificationType.error,
                 );
               }
             },
           );
-        } else {
-          _completer?.complete(result);
-          _completer = null;
         }
       },
-      (err) {
-        Log.error('onDeepLinkError: Unexpected deep link: $err');
+      onError: (error) {
+        Log.error('onDeepLinkError: Unexpected deep link: $error');
         if (_completer == null) {
           final context = AppGlobals.rootNavKey.currentState?.context;
           if (context != null) {
-            showSnackBarMessage(
-              context,
-              err.msg,
+            showToastNotification(
+              message: error.msg,
+              type: ToastificationType.error,
             );
           }
         } else {
-          _completer?.complete(FlowyResult.failure(err));
-          _completer = null;
+          _completer?.complete(FlowyResult.failure(error));
+          completer = null;
         }
       },
     );
   }
 
-  FlowyResult<void, FlowyError> _isAuthCallbackDeepLink(Uri uri) {
-    if (uri.fragment.contains('access_token')) {
-      return FlowyResult.success(null);
+  Uri? _buildDeepLinkUri(GotrueTokenResponsePB gotrueTokenResponse) {
+    final params = <String, String>{};
+
+    if (gotrueTokenResponse.hasAccessToken() &&
+        gotrueTokenResponse.accessToken.isNotEmpty) {
+      params['access_token'] = gotrueTokenResponse.accessToken;
     }
 
-    return FlowyResult.failure(
-      FlowyError.create()
-        ..code = ErrorCode.MissingAuthField
-        ..msg = uri.path,
-    );
-  }
+    if (gotrueTokenResponse.hasExpiresAt()) {
+      params['expires_at'] = gotrueTokenResponse.expiresAt.toString();
+    }
 
-  bool _isPaymentSuccessUri(Uri uri) {
-    return uri.host == 'payment-success';
+    if (gotrueTokenResponse.hasExpiresIn()) {
+      params['expires_in'] = gotrueTokenResponse.expiresIn.toString();
+    }
+
+    if (gotrueTokenResponse.hasProviderRefreshToken() &&
+        gotrueTokenResponse.providerRefreshToken.isNotEmpty) {
+      params['provider_refresh_token'] =
+          gotrueTokenResponse.providerRefreshToken;
+    }
+
+    if (gotrueTokenResponse.hasProviderAccessToken() &&
+        gotrueTokenResponse.providerAccessToken.isNotEmpty) {
+      params['provider_token'] = gotrueTokenResponse.providerAccessToken;
+    }
+
+    if (gotrueTokenResponse.hasRefreshToken() &&
+        gotrueTokenResponse.refreshToken.isNotEmpty) {
+      params['refresh_token'] = gotrueTokenResponse.refreshToken;
+    }
+
+    if (gotrueTokenResponse.hasTokenType() &&
+        gotrueTokenResponse.tokenType.isNotEmpty) {
+      params['token_type'] = gotrueTokenResponse.tokenType;
+    }
+
+    if (params.isEmpty) {
+      return null;
+    }
+
+    final fragment = params.entries
+        .map(
+          (e) =>
+              '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+        )
+        .join('&');
+
+    return Uri.parse('appflowy-flutter://login-callback#$fragment');
   }
 }
 
@@ -180,6 +231,8 @@ class InitAppFlowyCloudTask extends LaunchTask {
 
   @override
   Future<void> initialize(LaunchContext context) async {
+    await super.initialize(context);
+
     if (!isAppFlowyCloudEnabled) {
       return;
     }
@@ -200,23 +253,41 @@ class InitAppFlowyCloudTask extends LaunchTask {
 
   @override
   Future<void> dispose() async {
+    await super.dispose();
+
     await _authStateListener?.stop();
     _authStateListener = null;
   }
 }
 
-class DeepLinkResult {
-  DeepLinkResult({
-    required this.state,
-    this.result,
-  });
+// wrapper for AppLinks to support multiple listeners
+class _AppLinkWrapper {
+  _AppLinkWrapper._() {
+    _appLinkSubscription = _appLinks.uriLinkStream.listen((event) {
+      _streamSubscription.sink.add(event);
+    });
+  }
 
-  final DeepLinkState state;
-  final FlowyResult<UserProfilePB, FlowyError>? result;
-}
+  static final _AppLinkWrapper instance = _AppLinkWrapper._();
 
-enum DeepLinkState {
-  none,
-  loading,
-  finish,
+  final AppLinks _appLinks = AppLinks();
+  final _streamSubscription = StreamController<Uri?>.broadcast();
+  late final StreamSubscription<Uri?> _appLinkSubscription;
+
+  StreamSubscription<Uri?> listen(
+    void Function(Uri?) listener, {
+    Function? onError,
+    bool? cancelOnError,
+  }) {
+    return _streamSubscription.stream.listen(
+      listener,
+      onError: onError,
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  void dispose() {
+    _streamSubscription.close();
+    _appLinkSubscription.cancel();
+  }
 }

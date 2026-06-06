@@ -1,13 +1,12 @@
-use anyhow::Error;
 pub use client_api::entity::ai_dto::{TranslateItem, TranslateRowResponse};
-use collab::core::collab::DataSource;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use flowy_error::FlowyError;
 use lib_infra::async_trait::async_trait;
-use lib_infra::future::FutureResult;
 use std::collections::HashMap;
+use uuid::Uuid;
 
-pub type CollabDocStateByOid = HashMap<String, DataSource>;
+pub type EncodeCollabByOid = HashMap<Uuid, EncodedCollab>;
 pub type SummaryRowContent = HashMap<String, String>;
 pub type TranslateRowContent = Vec<TranslateItem>;
 
@@ -15,8 +14,8 @@ pub type TranslateRowContent = Vec<TranslateItem>;
 pub trait DatabaseAIService: Send + Sync {
   async fn summary_database_row(
     &self,
-    _workspace_id: &str,
-    _object_id: &str,
+    _workspace_id: &Uuid,
+    _object_id: &Uuid,
     _summary_row: SummaryRowContent,
   ) -> Result<String, FlowyError> {
     Ok("".to_string())
@@ -24,7 +23,7 @@ pub trait DatabaseAIService: Send + Sync {
 
   async fn translate_database_row(
     &self,
-    _workspace_id: &str,
+    _workspace_id: &Uuid,
     _translate_row: TranslateRowContent,
     _language: &str,
   ) -> Result<TranslateRowResponse, FlowyError> {
@@ -41,25 +40,33 @@ pub trait DatabaseAIService: Send + Sync {
 ///
 #[async_trait]
 pub trait DatabaseCloudService: Send + Sync {
-  fn get_database_object_doc_state(
+  async fn get_database_encode_collab(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     collab_type: CollabType,
-    workspace_id: &str,
-  ) -> FutureResult<Option<Vec<u8>>, Error>;
+    workspace_id: &Uuid,
+  ) -> Result<Option<EncodedCollab>, FlowyError>;
 
-  fn batch_get_database_object_doc_state(
+  async fn create_database_encode_collab(
     &self,
-    object_ids: Vec<String>,
+    object_id: &Uuid,
+    collab_type: CollabType,
+    workspace_id: &Uuid,
+    encoded_collab: EncodedCollab,
+  ) -> Result<(), FlowyError>;
+
+  async fn batch_get_database_encode_collab(
+    &self,
+    object_ids: Vec<Uuid>,
     object_ty: CollabType,
-    workspace_id: &str,
-  ) -> FutureResult<CollabDocStateByOid, Error>;
+    workspace_id: &Uuid,
+  ) -> Result<EncodeCollabByOid, FlowyError>;
 
-  fn get_database_collab_object_snapshots(
+  async fn get_database_collab_object_snapshots(
     &self,
-    object_id: &str,
+    object_id: &Uuid,
     limit: usize,
-  ) -> FutureResult<Vec<DatabaseSnapshot>, Error>;
+  ) -> Result<Vec<DatabaseSnapshot>, FlowyError>;
 }
 
 pub struct DatabaseSnapshot {

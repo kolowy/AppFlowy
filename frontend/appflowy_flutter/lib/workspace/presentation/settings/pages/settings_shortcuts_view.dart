@@ -1,6 +1,3 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/align_toolbar_item/custom_text_align_command.dart';
@@ -8,23 +5,28 @@ import 'package:appflowy/plugins/document/presentation/editor_plugins/base/strin
 import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/custom_copy_command.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/custom_cut_command.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/custom_paste_command.dart';
-import 'package:appflowy/plugins/document/presentation/editor_plugins/toggle/toggle_block_shortcut_event.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/math_equation/math_equation_shortcut.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/toggle/toggle_block_shortcuts.dart';
+import 'package:appflowy/shared/error_page/error_page.dart';
 import 'package:appflowy/workspace/application/settings/shortcuts/settings_shortcuts_cubit.dart';
 import 'package:appflowy/workspace/application/settings/shortcuts/settings_shortcuts_service.dart';
+import 'package:appflowy/workspace/presentation/home/menu/sidebar/space/shared_widget.dart';
 import 'package:appflowy/workspace/presentation/settings/shared/settings_alert_dialog.dart';
 import 'package:appflowy/workspace/presentation/settings/shared/settings_body.dart';
 import 'package:appflowy/workspace/presentation/settings/widgets/emoji_picker/emoji_shortcut_event.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:appflowy_editor_plugins/appflowy_editor_plugins.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/size.dart';
 import 'package:flowy_infra/theme_extension.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flowy_infra_ui/style_widget/hover.dart';
-import 'package:flowy_infra_ui/widget/error_page.dart';
-import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 class SettingsShortcutsView extends StatefulWidget {
   const SettingsShortcutsView({super.key});
@@ -56,21 +58,24 @@ class _SettingsShortcutsViewState extends State<SettingsShortcutsView> {
                 ),
                 const HSpace(10),
                 _ResetButton(
-                  onReset: () => SettingsAlertDialog(
-                    isDangerous: true,
-                    title: LocaleKeys.settings_shortcutsPage_resetDialog_title
-                        .tr(),
-                    subtitle: LocaleKeys
-                        .settings_shortcutsPage_resetDialog_description
-                        .tr(),
-                    confirmLabel: LocaleKeys
-                        .settings_shortcutsPage_resetDialog_buttonLabel
-                        .tr(),
-                    confirm: () {
-                      Navigator.of(context).pop();
-                      context.read<ShortcutsCubit>().resetToDefault();
-                    },
-                  ).show(context),
+                  onReset: () {
+                    showConfirmDialog(
+                      context: context,
+                      title: LocaleKeys.settings_shortcutsPage_resetDialog_title
+                          .tr(),
+                      description: LocaleKeys
+                          .settings_shortcutsPage_resetDialog_description
+                          .tr(),
+                      confirmLabel: LocaleKeys
+                          .settings_shortcutsPage_resetDialog_buttonLabel
+                          .tr(),
+                      onConfirm: (_) {
+                        context.read<ShortcutsCubit>().resetToDefault();
+                        Navigator.of(context).pop();
+                      },
+                      style: ConfirmPopupStyle.cancelAndOk,
+                    );
+                  },
                 ),
               ],
             ),
@@ -130,47 +135,9 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: FlowyTextField(
-        onChanged: onSearchChanged,
-        textStyle: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w400,
-        ),
-        decoration: InputDecoration(
-          hintText: LocaleKeys.settings_shortcutsPage_searchHint.tr(),
-          counterText: '',
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 9,
-            horizontal: 16,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.outline,
-            ),
-            borderRadius: Corners.s12Border,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            borderRadius: Corners.s12Border,
-          ),
-          errorBorder: OutlineInputBorder(
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.error,
-            ),
-            borderRadius: Corners.s12Border,
-          ),
-          focusedErrorBorder: OutlineInputBorder(
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.error,
-            ),
-            borderRadius: Corners.s12Border,
-          ),
-        ),
-      ),
+    return AFTextField(
+      onChanged: onSearchChanged,
+      hintText: LocaleKeys.settings_shortcutsPage_searchHint.tr(),
     );
   }
 }
@@ -482,7 +449,7 @@ class KeyBadge extends StatelessWidget {
         borderRadius: Corners.s4Border,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 1,
             offset: const Offset(0, 1),
           ),
@@ -594,6 +561,10 @@ extension CommandLabel on CommandShortcutEvent {
       label = LocaleKeys.settings_shortcutsPage_keybindings_alignCenter.tr();
     } else if (key == customTextRightAlignCommand.key) {
       label = LocaleKeys.settings_shortcutsPage_keybindings_alignRight.tr();
+    } else if (key == insertInlineMathEquationCommand.key) {
+      label = LocaleKeys
+          .settings_shortcutsPage_keybindings_insertInlineMathEquation
+          .tr();
     } else if (key == undoCommand.key) {
       label = LocaleKeys.settings_shortcutsPage_keybindings_undo.tr();
     } else if (key == redoCommand.key) {
@@ -609,7 +580,7 @@ extension CommandLabel on CommandShortcutEvent {
       label =
           LocaleKeys.settings_shortcutsPage_keybindings_deleteLeftSentence.tr();
     } else if (key == deleteCommand.key) {
-      label = PlatformExtension.isMacOS
+      label = UniversalPlatform.isMacOS
           ? LocaleKeys.settings_shortcutsPage_keybindings_deleteMacOS.tr()
           : LocaleKeys.settings_shortcutsPage_keybindings_delete.tr();
     } else if (key == deleteRightWordCommand.key) {

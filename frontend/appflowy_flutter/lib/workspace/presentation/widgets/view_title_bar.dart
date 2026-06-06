@@ -1,18 +1,35 @@
+import 'package:appflowy/features/page_access_level/logic/page_access_level_bloc.dart';
+import 'package:appflowy/features/share_tab/data/models/share_section_type.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
+import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
+import 'package:appflowy/startup/plugin/plugin.dart';
+import 'package:appflowy/startup/startup.dart';
+import 'package:appflowy/util/string_extension.dart';
+import 'package:appflowy/workspace/application/sidebar/space/space_bloc.dart';
 import 'package:appflowy/workspace/application/tabs/tabs_bloc.dart';
 import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy/workspace/application/view_title/view_title_bar_bloc.dart';
 import 'package:appflowy/workspace/application/view_title/view_title_bloc.dart';
+import 'package:appflowy/workspace/presentation/home/menu/menu_shared_state.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/space/space_icon.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy/workspace/presentation/widgets/rename_view_popover.dart';
-import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart'
+    hide AFRolePB;
+import 'package:appflowy_backend/protobuf/flowy-user/workspace.pbenum.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
+import 'package:collection/collection.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
-import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-// workspace name > ... > view_title
+import '../../../plugins/document/presentation/editor_plugins/header/emoji_icon_widget.dart';
+
+// space name > ... > view_title
 class ViewTitleBar extends StatelessWidget {
   const ViewTitleBar({
     super.key,
@@ -21,33 +38,110 @@ class ViewTitleBar extends StatelessWidget {
 
   final ViewPB view;
 
-  // late Future<List<ViewPB>> ancestors;
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) =>
-          ViewTitleBarBloc(view: view)..add(const ViewTitleBarEvent.initial()),
-      child: BlocBuilder<ViewTitleBarBloc, ViewTitleBarState>(
-        builder: (context, state) {
-          final ancestors = state.ancestors;
-          if (ancestors.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              height: 24,
-              child: Row(
-                children: _buildViewTitles(context, ancestors),
-              ),
-            ),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) => ViewTitleBarBloc(
+            view: view,
+          ),
+        ),
+      ],
+      child: BlocBuilder<PageAccessLevelBloc, PageAccessLevelState>(
+        buildWhen: (previous, current) =>
+            previous.isLoadingLockStatus != current.isLoadingLockStatus,
+        builder: (context, pageAccessLevelState) {
+          return BlocConsumer<ViewTitleBarBloc, ViewTitleBarState>(
+            listener: (context, state) {
+              // update the page section type when the space permission is changed
+              final spacePermission = state.ancestors
+                  .firstWhereOrNull(
+                    (ancestor) => ancestor.isSpace,
+                  )
+                  ?.spacePermission;
+              if (spacePermission == null) {
+                return;
+              }
+              final sectionType = switch (spacePermission) {
+                SpacePermission.publicToAll => SharedSectionType.public,
+                SpacePermission.private => SharedSectionType.private,
+              };
+              final bloc = context.read<PageAccessLevelBloc>();
+              if (!bloc.isClosed && !bloc.state.isShared) {
+                bloc.add(
+                  PageAccessLevelEvent.updateSectionType(sectionType),
+                );
+              }
+            },
+            builder: (context, state) {
+              final theme = AppFlowyTheme.of(context);
+              final ancestors = state.ancestors;
+              if (ancestors.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  height: 24,
+                  child: Row(
+                    children: [
+                      ..._buildViewTitles(
+                        context,
+                        ancestors,
+                        state.isDeleted,
+                        pageAccessLevelState.isEditable,
+                        pageAccessLevelState,
+                      ),
+                      HSpace(theme.spacing.m),
+                      _buildLockPageStatus(context),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
     );
   }
 
-  List<Widget> _buildViewTitles(BuildContext context, List<ViewPB> views) {
+  Widget _buildLockPageStatus(BuildContext context) {
+    return BlocConsumer<PageAccessLevelBloc, PageAccessLevelState>(
+      listenWhen: (previous, current) =>
+          previous.isLoadingLockStatus == current.isLoadingLockStatus &&
+          current.isLoadingLockStatus == false,
+      listener: (context, state) {
+        if (state.isLocked) {
+          showToastNotification(
+            message: LocaleKeys.lockPage_pageLockedToast.tr(),
+          );
+        }
+      },
+      builder: (context, state) {
+        if (state.isLocked) {
+          return LockedPageStatus();
+        } else if (!state.isLocked && state.lockCounter > 0) {
+          return ReLockedPageStatus();
+        }
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  List<Widget> _buildViewTitles(
+    BuildContext context,
+    List<ViewPB> views,
+    bool isDeleted,
+    bool isEditable,
+    PageAccessLevelState pageAccessLevelState,
+  ) {
+    final theme = AppFlowyTheme.of(context);
+
+    if (isDeleted) {
+      return _buildDeletedTitle(context, views.last);
+    }
+
     // if the level is too deep, only show the last two view, the first one view and the root view
     // for example:
     // if the views are [root, view1, view2, view3, view4, view5], only show [root, view1, ..., view4, view5]
@@ -59,6 +153,13 @@ class ViewTitleBar extends StatelessWidget {
 
     if (views.length <= 1) {
       return [];
+    }
+
+    // remove the space from views if the current user role is a guest
+    final myRole =
+        context.read<UserWorkspaceBloc>().state.currentWorkspace?.role;
+    if (myRole == AFRolePB.Guest) {
+      views = views.where((view) => !view.isSpace).toList();
     }
 
     // ignore the workspace name, use section name instead in the future
@@ -80,15 +181,17 @@ class ViewTitleBar extends StatelessWidget {
       final child = FlowyTooltip(
         key: ValueKey(view.id),
         message: view.name,
-        child: _ViewTitle(
+        child: ViewTitle(
           view: view,
-          behavior: i == views.length - 1
-              ? _ViewTitleBehavior.editable // only the last one is editable
-              : _ViewTitleBehavior.uneditable, // others are not editable
+          behavior: i == views.length - 1 && !view.isLocked && isEditable
+              ? ViewTitleBehavior.editable // only the last one is editable
+              : ViewTitleBehavior.uneditable, // others are not editable
           onUpdated: () {
-            context
-                .read<ViewTitleBarBloc>()
-                .add(const ViewTitleBarEvent.reload());
+            if (context.mounted) {
+              context
+                  .read<ViewTitleBarBloc>()
+                  .add(const ViewTitleBarEvent.reload());
+            }
           },
         ),
       );
@@ -100,31 +203,159 @@ class ViewTitleBar extends StatelessWidget {
         children.add(const FlowySvg(FlowySvgs.title_bar_divider_s));
       }
     }
+
+    // add the section icon in the breadcrumb
+    children.addAll([
+      HSpace(theme.spacing.xs),
+      BlocBuilder<PageAccessLevelBloc, PageAccessLevelState>(
+        buildWhen: (previous, current) =>
+            previous.sectionType != current.sectionType,
+        builder: (context, state) {
+          return _buildSectionIcon(context, state);
+        },
+      ),
+    ]);
+
     return children;
+  }
+
+  List<Widget> _buildDeletedTitle(BuildContext context, ViewPB view) {
+    return [
+      const TrashBreadcrumb(),
+      const FlowySvg(FlowySvgs.title_bar_divider_s),
+      FlowyTooltip(
+        key: ValueKey(view.id),
+        message: view.name,
+        child: ViewTitle(
+          view: view,
+          onUpdated: () => context
+              .read<ViewTitleBarBloc>()
+              .add(const ViewTitleBarEvent.reload()),
+        ),
+      ),
+    ];
+  }
+
+  Widget _buildSectionIcon(
+    BuildContext context,
+    PageAccessLevelState pageAccessLevelState,
+  ) {
+    final theme = AppFlowyTheme.of(context);
+    final state = context.read<UserWorkspaceBloc>().state;
+
+    if (state.currentWorkspace?.workspaceType == WorkspaceTypePB.LocalW) {
+      return const SizedBox.shrink();
+    }
+
+    final iconName = switch (pageAccessLevelState.sectionType) {
+      SharedSectionType.public => FlowySvgs.public_section_icon_m,
+      SharedSectionType.private => FlowySvgs.private_section_icon_m,
+      SharedSectionType.shared => FlowySvgs.shared_section_icon_m,
+      SharedSectionType.unknown =>
+        throw UnsupportedError('Unknown section type'),
+    };
+
+    final icon = FlowySvg(
+      iconName,
+      color: theme.iconColorScheme.tertiary,
+      size: Size.square(20),
+    );
+
+    final text = switch (pageAccessLevelState.sectionType) {
+      SharedSectionType.public => 'Team space',
+      SharedSectionType.private => 'Private',
+      SharedSectionType.shared => 'Shared',
+      SharedSectionType.unknown =>
+        throw UnsupportedError('Unknown section type'),
+    };
+
+    final workspaceName = state.currentWorkspace?.name;
+    final tooltipText = switch (pageAccessLevelState.sectionType) {
+      SharedSectionType.public => 'Everyone at $workspaceName has access',
+      SharedSectionType.private => 'Only you have access',
+      SharedSectionType.shared => '',
+      SharedSectionType.unknown =>
+        throw UnsupportedError('Unknown section type'),
+    };
+
+    return FlowyTooltip(
+      message: tooltipText,
+      child: Row(
+        textBaseline: TextBaseline.alphabetic,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        children: [
+          HSpace(theme.spacing.xs),
+          icon,
+          const HSpace(4.0), // ask designer to provide the spacing
+          Text(
+            text,
+            style: theme.textStyle.caption
+                .enhanced(color: theme.textColorScheme.tertiary),
+          ),
+          HSpace(theme.spacing.xs),
+        ],
+      ),
+    );
   }
 }
 
-enum _ViewTitleBehavior {
+class TrashBreadcrumb extends StatelessWidget {
+  const TrashBreadcrumb({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: FlowyButton(
+        useIntrinsicWidth: true,
+        margin: const EdgeInsets.symmetric(horizontal: 6.0),
+        onTap: () {
+          getIt<MenuSharedState>().latestOpenView = null;
+          getIt<TabsBloc>().add(
+            TabsEvent.openPlugin(
+              plugin: makePlugin(pluginType: PluginType.trash),
+            ),
+          );
+        },
+        text: Row(
+          children: [
+            const FlowySvg(FlowySvgs.trash_s, size: Size.square(14)),
+            const HSpace(4.0),
+            FlowyText.regular(
+              LocaleKeys.trash_text.tr(),
+              fontSize: 14.0,
+              overflow: TextOverflow.ellipsis,
+              figmaLineHeight: 18.0,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum ViewTitleBehavior {
   editable,
   uneditable,
 }
 
-class _ViewTitle extends StatefulWidget {
-  const _ViewTitle({
+class ViewTitle extends StatefulWidget {
+  const ViewTitle({
+    super.key,
     required this.view,
-    this.behavior = _ViewTitleBehavior.editable,
+    this.behavior = ViewTitleBehavior.editable,
     required this.onUpdated,
   });
 
   final ViewPB view;
-  final _ViewTitleBehavior behavior;
+  final ViewTitleBehavior behavior;
   final VoidCallback onUpdated;
 
   @override
-  State<_ViewTitle> createState() => _ViewTitleState();
+  State<ViewTitle> createState() => _ViewTitleState();
 }
 
-class _ViewTitleState extends State<_ViewTitle> {
+class _ViewTitleState extends State<ViewTitle> {
   final popoverController = PopoverController();
   final textEditingController = TextEditingController();
 
@@ -138,12 +369,21 @@ class _ViewTitleState extends State<_ViewTitle> {
 
   @override
   Widget build(BuildContext context) {
-    final isEditable = widget.behavior == _ViewTitleBehavior.editable;
+    final isEditable = widget.behavior == ViewTitleBehavior.editable;
 
     return BlocProvider(
-      create: (_) =>
-          ViewTitleBloc(view: widget.view)..add(const ViewTitleEvent.initial()),
+      create: (_) => ViewTitleBloc(view: widget.view)
+        ..add(
+          const ViewTitleEvent.initial(),
+        ),
       child: BlocConsumer<ViewTitleBloc, ViewTitleState>(
+        listenWhen: (previous, current) {
+          if (previous.view == null || current.view == null) {
+            return false;
+          }
+
+          return previous.view != current.view;
+        },
         listener: (_, state) {
           _resetTextEditingController(state);
           widget.onUpdated();
@@ -173,7 +413,7 @@ class _ViewTitleState extends State<_ViewTitle> {
     return Container(
       alignment: Alignment.center,
       margin: const EdgeInsets.symmetric(horizontal: 6.0),
-      child: _buildIconAndName(state, false),
+      child: _buildIconAndName(context, state, false),
     );
   }
 
@@ -185,7 +425,7 @@ class _ViewTitleState extends State<_ViewTitle> {
         child: FlowyButton(
           useIntrinsicWidth: true,
           margin: const EdgeInsets.symmetric(horizontal: 6.0),
-          text: _buildIconAndName(state, false),
+          text: _buildIconAndName(context, state, false),
         ),
       ),
     );
@@ -204,11 +444,16 @@ class _ViewTitleState extends State<_ViewTitle> {
         // icon + textfield
         _resetTextEditingController(state);
         return RenameViewPopover(
-          viewId: widget.view.id,
+          view: widget.view,
           name: widget.view.name,
           popoverController: popoverController,
           icon: widget.view.defaultIcon(),
           emoji: state.icon,
+          tabs: const [
+            PickerTabType.emoji,
+            PickerTabType.icon,
+            PickerTabType.custom,
+          ],
         );
       },
       child: SizedBox(
@@ -216,29 +461,34 @@ class _ViewTitleState extends State<_ViewTitle> {
         child: FlowyButton(
           useIntrinsicWidth: true,
           margin: const EdgeInsets.symmetric(horizontal: 6.0),
-          text: _buildIconAndName(state, true),
+          text: _buildIconAndName(context, state, true),
         ),
       ),
     );
   }
 
-  Widget _buildIconAndName(ViewTitleState state, bool isEditable) {
+  Widget _buildIconAndName(
+    BuildContext context,
+    ViewTitleState state,
+    bool isEditable,
+  ) {
+    final view = state.view ?? widget.view;
+    final spaceIcon = view.buildSpaceIconSvg(context);
+    final icon =
+        state.icon.isNotEmpty ? state.icon : view.icon.toEmojiIconData();
+    final name = state.name.isEmpty ? widget.view.name : state.name;
     return SingleChildScrollView(
       child: Row(
         children: [
-          if (state.icon.isNotEmpty) ...[
-            FlowyText.emoji(
-              state.icon,
-              fontSize: 14.0,
-              figmaLineHeight: 18.0,
-            ),
+          if (icon.isNotEmpty) ...[
+            RawEmojiIconWidget(emoji: icon, emojiSize: 14.0),
             const HSpace(4.0),
           ],
-          if (state.view?.isSpace == true &&
-              state.view?.spaceIconSvg != null) ...[
+          if (view.isSpace && spaceIcon != null) ...[
             SpaceIcon(
               dimension: 14,
-              space: state.view!,
+              svgSize: 8.5,
+              space: view,
               cornerRadius: 4,
             ),
             const HSpace(6.0),
@@ -246,7 +496,7 @@ class _ViewTitleState extends State<_ViewTitle> {
           Opacity(
             opacity: isEditable ? 1.0 : 0.5,
             child: FlowyText.regular(
-              state.name,
+              name.orDefault(LocaleKeys.menuAppHeader_defaultNewPageName.tr()),
               fontSize: 14.0,
               overflow: TextOverflow.ellipsis,
               figmaLineHeight: 18.0,
@@ -264,5 +514,94 @@ class _ViewTitleState extends State<_ViewTitle> {
         baseOffset: 0,
         extentOffset: state.name.length,
       );
+  }
+}
+
+class LockedPageStatus extends StatelessWidget {
+  const LockedPageStatus({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = const Color(0xFFD95A0B);
+    return FlowyTooltip(
+      message: LocaleKeys.lockPage_lockTooltip.tr(),
+      child: DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: color),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          color: context.lockedPageButtonBackground,
+        ),
+        child: FlowyButton(
+          useIntrinsicWidth: true,
+          margin: const EdgeInsets.symmetric(
+            horizontal: 4.0,
+            vertical: 4.0,
+          ),
+          iconPadding: 4.0,
+          text: FlowyText.regular(
+            LocaleKeys.lockPage_lockPage.tr(),
+            color: color,
+            fontSize: 12.0,
+          ),
+          hoverColor: color.withValues(alpha: 0.1),
+          leftIcon: FlowySvg(
+            FlowySvgs.lock_page_fill_s,
+            blendMode: null,
+          ),
+          onTap: () => context.read<PageAccessLevelBloc>().add(
+                const PageAccessLevelEvent.unlock(),
+              ),
+        ),
+      ),
+    );
+  }
+}
+
+class ReLockedPageStatus extends StatelessWidget {
+  const ReLockedPageStatus({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = const Color(0xFF8F959E);
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: RoundedRectangleBorder(
+          side: BorderSide(color: iconColor),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        color: context.lockedPageButtonBackground,
+      ),
+      child: FlowyButton(
+        useIntrinsicWidth: true,
+        margin: const EdgeInsets.symmetric(
+          horizontal: 4.0,
+          vertical: 4.0,
+        ),
+        iconPadding: 4.0,
+        text: FlowyText.regular(
+          LocaleKeys.lockPage_reLockPage.tr(),
+          fontSize: 12.0,
+        ),
+        leftIcon: FlowySvg(
+          FlowySvgs.unlock_page_s,
+          color: iconColor,
+          blendMode: null,
+        ),
+        onTap: () => context.read<PageAccessLevelBloc>().add(
+              const PageAccessLevelEvent.lock(),
+            ),
+      ),
+    );
+  }
+}
+
+extension on BuildContext {
+  Color get lockedPageButtonBackground {
+    if (Theme.of(this).brightness == Brightness.light) {
+      return Colors.white.withValues(alpha: 0.75);
+    }
+    return Color(0xB21B1A22);
   }
 }

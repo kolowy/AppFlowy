@@ -11,6 +11,7 @@ import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/file_picker/file_picker_service.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -51,6 +52,14 @@ class ExportTab extends StatelessWidget {
           svg: FlowySvgs.duplicate_s,
           onTap: () => _exportToClipboard(context),
         ),
+        if (kDebugMode) ...[
+          const VSpace(10),
+          _ExportButton(
+            title: 'JSON (Debug Mode)',
+            svg: FlowySvgs.duplicate_s,
+            onTap: () => _exportJSON(context),
+          ),
+        ],
       ],
     );
   }
@@ -61,9 +70,17 @@ class ExportTab extends StatelessWidget {
         const VSpace(10),
         _ExportButton(
           title: LocaleKeys.shareAction_csv.tr(),
-          svg: FlowySvgs.database_layout_m,
+          svg: FlowySvgs.database_layout_s,
           onTap: () => _exportCSV(context),
         ),
+        if (kDebugMode) ...[
+          const VSpace(10),
+          _ExportButton(
+            title: 'Raw Database Data (Debug Mode)',
+            svg: FlowySvgs.duplicate_s,
+            onTap: () => _exportRawDatabaseData(context),
+          ),
+        ],
       ],
     );
   }
@@ -88,12 +105,28 @@ class ExportTab extends StatelessWidget {
     final viewName = context.read<ShareBloc>().state.viewName;
     final exportPath = await getIt<FilePickerService>().saveFile(
       dialogTitle: '',
-      fileName: '${viewName.toFileName()}.md',
+      fileName: '${viewName.toFileName()}.zip',
     );
     if (context.mounted && exportPath != null) {
       context.read<ShareBloc>().add(
             ShareEvent.share(
               ShareType.markdown,
+              exportPath,
+            ),
+          );
+    }
+  }
+
+  Future<void> _exportJSON(BuildContext context) async {
+    final viewName = context.read<ShareBloc>().state.viewName;
+    final exportPath = await getIt<FilePickerService>().saveFile(
+      dialogTitle: '',
+      fileName: '${viewName.toFileName()}.json',
+    );
+    if (context.mounted && exportPath != null) {
+      context.read<ShareBloc>().add(
+            ShareEvent.share(
+              ShareType.json,
               exportPath,
             ),
           );
@@ -116,6 +149,22 @@ class ExportTab extends StatelessWidget {
     }
   }
 
+  Future<void> _exportRawDatabaseData(BuildContext context) async {
+    final viewName = context.read<ShareBloc>().state.viewName;
+    final exportPath = await getIt<FilePickerService>().saveFile(
+      dialogTitle: '',
+      fileName: '${viewName.toFileName()}.json',
+    );
+    if (context.mounted && exportPath != null) {
+      context.read<ShareBloc>().add(
+            ShareEvent.share(
+              ShareType.rawDatabaseData,
+              exportPath,
+            ),
+          );
+    }
+  }
+
   Future<void> _exportToClipboard(BuildContext context) async {
     final documentExporter = DocumentExporter(context.read<ShareBloc>().view);
     final result = await documentExporter.export(DocumentExportType.markdown);
@@ -125,11 +174,10 @@ class ExportTab extends StatelessWidget {
           ClipboardServiceData(plainText: markdown),
         );
         showToastNotification(
-          context,
-          message: LocaleKeys.grid_url_copiedNotification.tr(),
+          message: LocaleKeys.message_copy_success.tr(),
         );
       },
-      (error) => showToastNotification(context, message: error.msg),
+      (error) => showToastNotification(message: error.msg),
     );
   }
 }
@@ -149,7 +197,7 @@ class _ExportButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Theme.of(context).isLightMode
         ? const Color(0x1E14171B)
-        : Colors.white.withOpacity(0.1);
+        : Colors.white.withValues(alpha: 0.1);
     final radius = BorderRadius.circular(10.0);
     return FlowyButton(
       margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
@@ -161,7 +209,10 @@ class _ExportButton extends StatelessWidget {
         borderRadius: radius,
       ),
       radius: radius,
-      text: FlowyText(title),
+      text: FlowyText(
+        title,
+        lineHeight: 1.0,
+      ),
       leftIcon: FlowySvg(svg),
       onTap: onTap,
     );

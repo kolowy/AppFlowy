@@ -1,29 +1,30 @@
+use async_trait::async_trait;
 use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
 use collab_database::fields::Field;
 use indexmap::IndexMap;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tracing::event;
 
 use flowy_error::{FlowyError, FlowyResult};
-use lib_dispatch::prelude::af_spawn;
-use lib_infra::future::Fut;
 
 use crate::entities::{GroupChangesPB, GroupPB, InsertedGroupPB};
 use crate::services::field::RowSingleCellData;
 use crate::services::group::{
-  default_group_setting, GeneratedGroups, Group, GroupChangeset, GroupData, GroupSetting,
+  GeneratedGroups, Group, GroupChangeset, GroupData, GroupSetting, default_group_setting,
 };
 
+#[async_trait]
 pub trait GroupContextDelegate: Send + Sync + 'static {
-  fn get_group_setting(&self, view_id: &str) -> Fut<Option<Arc<GroupSetting>>>;
+  async fn get_group_setting(&self, view_id: &str) -> Option<Arc<GroupSetting>>;
 
-  fn get_configuration_cells(&self, view_id: &str, field_id: &str) -> Fut<Vec<RowSingleCellData>>;
+  async fn get_configuration_cells(&self, view_id: &str, field_id: &str) -> Vec<RowSingleCellData>;
 
-  fn save_configuration(&self, view_id: &str, group_setting: GroupSetting) -> Fut<FlowyResult<()>>;
+  async fn save_configuration(&self, view_id: &str, group_setting: GroupSetting)
+  -> FlowyResult<()>;
 }
 
 impl<T> std::fmt::Display for GroupControllerContext<T> {
@@ -350,7 +351,7 @@ where
   /// # Arguments
   ///
   /// * `mut_configuration_fn`: mutate the [GroupSetting] and return whether the [GroupSetting] is
-  /// changed. If the [GroupSetting] is changed, the [GroupSetting] will be saved to the storage.
+  ///   changed. If the [GroupSetting] is changed, the [GroupSetting] will be saved to the storage.
   ///
   fn mut_configuration(
     &mut self,
@@ -362,7 +363,7 @@ where
       let configuration = (*self.setting).clone();
       let delegate = self.delegate.clone();
       let view_id = self.view_id.clone();
-      af_spawn(async move {
+      tokio::spawn(async move {
         match delegate.save_configuration(&view_id, configuration).await {
           Ok(_) => {},
           Err(e) => {
@@ -462,7 +463,7 @@ impl MergeGroupResult {
 mod tests {
   use crate::services::group::Group;
 
-  use super::{merge_groups, MergeGroupResult};
+  use super::{MergeGroupResult, merge_groups};
 
   #[test]
   fn merge_groups_test() {

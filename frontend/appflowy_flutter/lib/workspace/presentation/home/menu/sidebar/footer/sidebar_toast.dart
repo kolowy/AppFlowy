@@ -1,20 +1,20 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/shared/af_role_pb_extension.dart';
 import 'package:appflowy/workspace/application/settings/plan/workspace_subscription_ext.dart';
 import 'package:appflowy/workspace/application/settings/settings_dialog_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/billing/sidebar_plan_bloc.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/shared/sidebar_setting.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/workspace.pb.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/theme_extension.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class SidebarToast extends StatelessWidget {
@@ -30,6 +30,10 @@ class SidebarToast extends StatelessWidget {
           storageLimitHit: () => WidgetsBinding.instance.addPostFrameCallback(
             (_) => _showStorageLimitDialog(context),
           ),
+          singleFileLimitHit: () =>
+              WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _showSingleFileLimitDialog(context),
+          ),
           orElse: () {},
         );
       },
@@ -39,15 +43,16 @@ class SidebarToast extends StatelessWidget {
           storageLimitHit: () => PlanIndicator(
             planName: SubscriptionPlanPB.Free.label,
             text: LocaleKeys.sideBar_upgradeToPro.tr(),
-            onTap: () => _hanldeOnTap(context, SubscriptionPlanPB.Pro),
+            onTap: () => _handleOnTap(context, SubscriptionPlanPB.Pro),
             reason: LocaleKeys.sideBar_storageLimitDialogTitle.tr(),
           ),
           aiMaxiLimitHit: () => PlanIndicator(
             planName: SubscriptionPlanPB.AiMax.label,
             text: LocaleKeys.sideBar_upgradeToAIMax.tr(),
-            onTap: () => _hanldeOnTap(context, SubscriptionPlanPB.AiMax),
+            onTap: () => _handleOnTap(context, SubscriptionPlanPB.AiMax),
             reason: LocaleKeys.sideBar_aiResponseLimitTitle.tr(),
           ),
+          singleFileLimitHit: () => const SizedBox.shrink(),
         );
       },
     );
@@ -59,14 +64,28 @@ class SidebarToast extends StatelessWidget {
         description: LocaleKeys.sideBar_storageLimitDialogTitle.tr(),
         confirmLabel:
             LocaleKeys.settings_comparePlanDialog_actions_upgrade.tr(),
-        onConfirm: () {
+        onConfirm: (_) {
           WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _hanldeOnTap(context, SubscriptionPlanPB.Pro),
+            (_) => _handleOnTap(context, SubscriptionPlanPB.Pro),
           );
         },
       );
 
-  void _hanldeOnTap(BuildContext context, SubscriptionPlanPB plan) {
+  void _showSingleFileLimitDialog(BuildContext context) => showConfirmDialog(
+        context: context,
+        title: LocaleKeys.sideBar_upgradeToPro.tr(),
+        description:
+            LocaleKeys.sideBar_singleFileProPlanLimitationDescription.tr(),
+        confirmLabel:
+            LocaleKeys.settings_comparePlanDialog_actions_upgrade.tr(),
+        onConfirm: (_) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _handleOnTap(context, SubscriptionPlanPB.Pro),
+          );
+        },
+      );
+
+  void _handleOnTap(BuildContext context, SubscriptionPlanPB plan) {
     final userProfile = context.read<SidebarPlanBloc>().state.userProfile;
     if (userProfile == null) {
       return Log.error(
@@ -75,25 +94,31 @@ class SidebarToast extends StatelessWidget {
     }
 
     final userWorkspaceBloc = context.read<UserWorkspaceBloc>();
-    final member = userWorkspaceBloc.state.currentWorkspaceMember;
-    if (member == null) {
+    final role = userWorkspaceBloc.state.currentWorkspace?.role;
+    if (role == null) {
       return Log.error(
         "Member is null. It should not happen. If you see this error, it's a bug",
       );
     }
 
     // Only if the user is the workspace owner will we navigate to the plan page.
-    if (member.role.isOwner) {
+    if (role.isOwner) {
       showSettingsDialog(
         context,
-        userProfile,
-        userWorkspaceBloc,
-        SettingsPage.plan,
+        userWorkspaceBloc: userWorkspaceBloc,
+        initPage: SettingsPage.plan,
       );
     } else {
-      final message = plan == SubscriptionPlanPB.AiMax
-          ? LocaleKeys.sideBar_askOwnerToUpgradeToAIMax.tr()
-          : LocaleKeys.sideBar_askOwnerToUpgradeToPro.tr();
+      final String message;
+      if (plan == SubscriptionPlanPB.AiMax) {
+        message = Platform.isIOS
+            ? LocaleKeys.sideBar_askOwnerToUpgradeToAIMaxIOS.tr()
+            : LocaleKeys.sideBar_askOwnerToUpgradeToAIMax.tr();
+      } else {
+        message = Platform.isIOS
+            ? LocaleKeys.sideBar_askOwnerToUpgradeToProIOS.tr()
+            : LocaleKeys.sideBar_askOwnerToUpgradeToPro.tr();
+      }
 
       showDialog(
         context: context,
@@ -148,8 +173,8 @@ class _PlanIndicatorState extends State<PlanIndicator> {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        const Color(0xFF8032FF).withOpacity(.1),
-        const Color(0xFFEF35FF).withOpacity(.1),
+        const Color(0xFF8032FF).withValues(alpha: .1),
+        const Color(0xFFEF35FF).withValues(alpha: .1),
       ],
     );
 

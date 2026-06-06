@@ -12,6 +12,7 @@ final _defaultToolbarItems = [
   aaToolbarItem,
   todoListToolbarItem,
   bulletedListToolbarItem,
+  addAttachmentItem,
   numberedListToolbarItem,
   boldToolbarItem,
   italicToolbarItem,
@@ -35,6 +36,7 @@ final _listToolbarItems = [
   underlineToolbarItem,
   strikethroughToolbarItem,
   colorToolbarItem,
+  addAttachmentItem,
   undoToolbarItem,
   redoToolbarItem,
 ];
@@ -67,7 +69,11 @@ List<AppFlowyMobileToolbarItem> buildMobileToolbarItems(
   }
 
   if (!selection.isCollapsed) {
-    return _textToolbarItems;
+    final items = List.of(_textToolbarItems);
+    if (onlyShowInSingleSelectionAndTextType(editorState)) {
+      items.add(linkToolbarItem);
+    }
+    return items;
   }
 
   final allSelectedAreListType = editorState

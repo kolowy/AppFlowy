@@ -1,6 +1,8 @@
+import 'package:appflowy/plugins/ai_chat/application/ai_model_switch_listener.dart';
 import 'package:appflowy/user/application/user_listener.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
 import 'package:appflowy_backend/log.dart';
+import 'package:appflowy_backend/protobuf/flowy-ai/entities.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:appflowy_result/appflowy_result.dart';
@@ -9,34 +11,55 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'settings_ai_bloc.freezed.dart';
 
+const String aiModelsGlobalActiveModel = "global_active_model";
+
 class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
-  SettingsAIBloc(this.userProfile)
-      : _userListener = UserListener(userProfile: userProfile),
-        super(SettingsAIState(userProfile: userProfile)) {
+  SettingsAIBloc(
+    this.userProfile,
+    this.workspaceId,
+  )   : _userListener = UserListener(userProfile: userProfile),
+        _aiModelSwitchListener =
+            AIModelSwitchListener(objectId: aiModelsGlobalActiveModel),
+        super(
+          SettingsAIState(
+            userProfile: userProfile,
+          ),
+        ) {
+    _aiModelSwitchListener.start(
+      onUpdateSelectedModel: (model) {
+        if (!isClosed) {
+          _loadModelList();
+        }
+      },
+    );
     _dispatch();
   }
 
   final UserListener _userListener;
   final UserProfilePB userProfile;
+  final String workspaceId;
+  final AIModelSwitchListener _aiModelSwitchListener;
 
   @override
   Future<void> close() async {
     await _userListener.stop();
+    await _aiModelSwitchListener.stop();
     return super.close();
   }
 
   void _dispatch() {
-    on<SettingsAIEvent>((event, emit) {
-      event.when(
+    on<SettingsAIEvent>((event, emit) async {
+      await event.when(
         started: () {
           _userListener.start(
             onProfileUpdated: _onProfileUpdated,
             onUserWorkspaceSettingUpdated: (settings) {
               if (!isClosed) {
-                add(SettingsAIEvent.didLoadAISetting(settings));
+                add(SettingsAIEvent.didLoadWorkspaceSetting(settings));
               }
             },
           );
+          _loadModelList();
           _loadUserWorkspaceSetting();
         },
         didReceiveUserProfile: (userProfile) {
@@ -51,10 +74,15 @@ class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
                 !(state.aiSettings?.disableSearchIndexing ?? false),
           );
         },
-        selectModel: (AIModelPB model) {
-          _updateUserWorkspaceSetting(model: model);
+        selectModel: (AIModelPB model) async {
+          await AIEventUpdateSelectedModel(
+            UpdateSelectedModelPB(
+              source: aiModelsGlobalActiveModel,
+              selectedModel: model,
+            ),
+          ).send();
         },
-        didLoadAISetting: (UseAISettingPB settings) {
+        didLoadWorkspaceSetting: (WorkspaceSettingsPB settings) {
           emit(
             state.copyWith(
               aiSettings: settings,
@@ -62,16 +90,23 @@ class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
             ),
           );
         },
+        didLoadAvailableModels: (ModelSelectionPB models) {
+          emit(
+            state.copyWith(
+              availableModels: models,
+            ),
+          );
+        },
       );
     });
   }
 
-  void _updateUserWorkspaceSetting({
+  Future<FlowyResult<void, FlowyError>> _updateUserWorkspaceSetting({
     bool? disableSearchIndexing,
-    AIModelPB? model,
-  }) {
+    String? model,
+  }) async {
     final payload = UpdateUserWorkspaceSettingPB(
-      workspaceId: userProfile.workspaceId,
+      workspaceId: workspaceId,
     );
     if (disableSearchIndexing != null) {
       payload.disableSearchIndexing = disableSearchIndexing;
@@ -79,7 +114,12 @@ class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
     if (model != null) {
       payload.aiModel = model;
     }
-    UserEventUpdateWorkspaceSetting(payload).send();
+    final result = await UserEventUpdateWorkspaceSetting(payload).send();
+    result.fold(
+      (ok) => Log.info('Update workspace setting success'),
+      (err) => Log.error('Update workspace setting failed: $err'),
+    );
+    return result;
   }
 
   void _onProfileUpdated(
@@ -90,12 +130,25 @@ class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
         (err) => Log.error(err),
       );
 
+  void _loadModelList() {
+    final payload = ModelSourcePB(source: aiModelsGlobalActiveModel);
+    AIEventGetSettingModelSelection(payload).send().then((result) {
+      result.fold((models) {
+        if (!isClosed) {
+          add(SettingsAIEvent.didLoadAvailableModels(models));
+        }
+      }, (err) {
+        Log.error(err);
+      });
+    });
+  }
+
   void _loadUserWorkspaceSetting() {
-    final payload = UserWorkspaceIdPB(workspaceId: userProfile.workspaceId);
+    final payload = UserWorkspaceIdPB(workspaceId: workspaceId);
     UserEventGetWorkspaceSetting(payload).send().then((result) {
       result.fold((settings) {
         if (!isClosed) {
-          add(SettingsAIEvent.didLoadAISetting(settings));
+          add(SettingsAIEvent.didLoadWorkspaceSetting(settings));
         }
       }, (err) {
         Log.error(err);
@@ -107,8 +160,8 @@ class SettingsAIBloc extends Bloc<SettingsAIEvent, SettingsAIState> {
 @freezed
 class SettingsAIEvent with _$SettingsAIEvent {
   const factory SettingsAIEvent.started() = _Started;
-  const factory SettingsAIEvent.didLoadAISetting(
-    UseAISettingPB settings,
+  const factory SettingsAIEvent.didLoadWorkspaceSetting(
+    WorkspaceSettingsPB settings,
   ) = _DidLoadWorkspaceSetting;
 
   const factory SettingsAIEvent.toggleAISearch() = _toggleAISearch;
@@ -118,13 +171,18 @@ class SettingsAIEvent with _$SettingsAIEvent {
   const factory SettingsAIEvent.didReceiveUserProfile(
     UserProfilePB newUserProfile,
   ) = _DidReceiveUserProfile;
+
+  const factory SettingsAIEvent.didLoadAvailableModels(
+    ModelSelectionPB models,
+  ) = _DidLoadAvailableModels;
 }
 
 @freezed
 class SettingsAIState with _$SettingsAIState {
   const factory SettingsAIState({
     required UserProfilePB userProfile,
-    UseAISettingPB? aiSettings,
+    WorkspaceSettingsPB? aiSettings,
+    ModelSelectionPB? availableModels,
     @Default(true) bool enableSearchIndexing,
   }) = _SettingsAIState;
 }

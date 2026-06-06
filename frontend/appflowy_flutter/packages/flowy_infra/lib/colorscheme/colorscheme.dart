@@ -89,6 +89,8 @@ class FlowyColorScheme {
     required this.borderColor,
     required this.scrollbarColor,
     required this.scrollbarHoverColor,
+    required this.lightIconColor,
+    required this.toolbarHoverColor,
   });
 
   final Color surface;
@@ -151,6 +153,9 @@ class FlowyColorScheme {
 
   final Color scrollbarColor;
   final Color scrollbarHoverColor;
+
+  final Color lightIconColor;
+  final Color toolbarHoverColor;
 
   factory FlowyColorScheme.fromJson(Map<String, dynamic> json) =>
       _$FlowyColorSchemeFromJson(json);

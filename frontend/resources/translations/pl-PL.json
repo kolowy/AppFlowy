@@ -164,14 +164,14 @@
   "questionBubble": {
     "shortcuts": "Skróty",
     "whatsNew": "Co nowego?",
-    "help": "Pomoc & Wsparcie",
     "markdown": "Markdown",
     "debug": {
       "name": "Informacje Debugowania",
       "success": "Skopiowano informacje debugowania do schowka!",
       "fail": "Nie mozna skopiować informacji debugowania do schowka"
     },
-    "feedback": "Feedback"
+    "feedback": "Feedback",
+    "help": "Pomoc & Wsparcie"
   },
   "menuAppHeader": {
     "moreButtonToolTip": "Usuń, zmień nazwę i więcej...",
@@ -342,7 +342,6 @@
       "historicalUserList": "Historia logowania użytkownika",
       "historicalUserListTooltip": "Na tej liście wyświetlane są Twoje anonimowe konta. Możesz kliknąć konto, aby wyświetlić jego szczegóły. Konta anonimowe tworzy się poprzez kliknięcie przycisku „Rozpocznij”.",
       "openHistoricalUser": "Kliknij, aby otworzyć anonimowe konto",
-      "supabaseSetting": "Ustawienie Supabase",
       "cloudSetting": "Ustawienia Chmury"
     },
     "notifications": {
@@ -447,8 +446,8 @@
       "tooltipSelectIcon": "Wybierz ikonę",
       "selectAnIcon": "Wybierz ikonę",
       "pleaseInputYourOpenAIKey": "wprowadź swój klucz AI",
-      "pleaseInputYourStabilityAIKey": "wprowadź swój klucz Stability AI",
-      "clickToLogout": "Kliknij, aby wylogować bieżącego użytkownika"
+      "clickToLogout": "Kliknij, aby wylogować bieżącego użytkownika",
+      "pleaseInputYourStabilityAIKey": "wprowadź swój klucz Stability AI"
     },
     "mobile": {
       "personalInfo": "Informacje Osobiste",
@@ -738,8 +737,8 @@
         "defaultColor": "Domyślny"
       },
       "image": {
-        "copiedToPasteBoard": "Link do obrazu został skopiowany do schowka",
-        "addAnImage": "Dodaj obraz"
+        "addAnImage": "Dodaj obraz",
+        "copiedToPasteBoard": "Link do obrazu został skopiowany do schowka"
       },
       "outline": {
         "addHeadingToCreateOutline": "Dodaj nagłówki, aby utworzyć spis treści."
@@ -796,11 +795,11 @@
       },
       "searchForAnImage": "Szukaj obrazu",
       "pleaseInputYourOpenAIKey": "wpisz swój klucz AI w ustawieniach",
-      "pleaseInputYourStabilityAIKey": "wpisz swój klucz Stability AI w ustawieniach",
       "saveImageToGallery": "Zapisz obraz",
       "failedToAddImageToGallery": "Nie udało się dodać obrazu do galerii",
       "successToAddImageToGallery": "Pomyślnie dodano obraz do galerii",
-      "unableToLoadImage": "Nie udało się wczytać obrazu"
+      "unableToLoadImage": "Nie udało się wczytać obrazu",
+      "pleaseInputYourStabilityAIKey": "wpisz swój klucz Stability AI w ustawieniach"
     },
     "codeBlock": {
       "language": {

@@ -1,15 +1,16 @@
+import 'package:appflowy/features/page_access_level/logic/page_access_level_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/presentation/database/board/board.dart';
 import 'package:appflowy/mobile/presentation/database/board/widgets/group_card_header.dart';
 import 'package:appflowy/mobile/presentation/database/card/card.dart';
-import 'package:appflowy/mobile/presentation/widgets/widgets.dart';
 import 'package:appflowy/plugins/database/application/database_controller.dart';
 import 'package:appflowy/plugins/database/board/application/board_bloc.dart';
-import 'package:appflowy/plugins/database/grid/presentation/widgets/header/field_type_extension.dart';
 import 'package:appflowy/plugins/database/widgets/card/card.dart';
 import 'package:appflowy/plugins/database/widgets/cell/card_cell_builder.dart';
 import 'package:appflowy/plugins/database/widgets/cell/card_cell_style_maps/mobile_board_card_cell_style.dart';
+import 'package:appflowy/shared/flowy_error_page.dart';
+import 'package:appflowy/util/field_type_extension.dart';
 import 'package:appflowy/workspace/application/settings/appearance/appearance_cubit.dart';
 import 'package:appflowy_backend/protobuf/flowy-database2/protobuf.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
@@ -69,10 +70,10 @@ class _MobileBoardPageState extends State<MobileBoardPage> {
           loading: (_) => const Center(
             child: CircularProgressIndicator.adaptive(),
           ),
-          error: (err) => FlowyMobileStateContainer.error(
-            emoji: '🛸',
-            title: LocaleKeys.board_mobile_failedToLoad.tr(),
-            errorMsg: err.toString(),
+          error: (err) => Center(
+            child: AppFlowyErrorPage(
+              error: err.error,
+            ),
           ),
           ready: (data) => const _BoardContent(),
           orElse: () => const SizedBox.shrink(),
@@ -142,6 +143,9 @@ class _BoardContentState extends State<_BoardContent> {
         return state.maybeMap(
           orElse: () => const SizedBox.shrink(),
           ready: (state) {
+            final isEditable =
+                context.watch<PageAccessLevelBloc?>()?.state.isEditable ??
+                    false;
             final showCreateGroupButton = context
                     .read<BoardBloc>()
                     .groupingFieldType
@@ -159,15 +163,17 @@ class _BoardContentState extends State<_BoardContent> {
                       padding: config.groupHeaderPadding,
                     )
                   : const HSpace(16),
-              trailing: showCreateGroupButton
+              trailing: showCreateGroupButton && isEditable
                   ? const MobileBoardTrailing()
                   : const HSpace(16),
-              headerBuilder: (_, groupData) => BlocProvider<BoardBloc>.value(
-                value: context.read<BoardBloc>(),
-                child: GroupCardHeader(
-                  groupData: groupData,
-                ),
-              ),
+              headerBuilder: (_, groupData) {
+                return IgnorePointer(
+                  ignoring: !isEditable,
+                  child: GroupCardHeader(
+                    groupData: groupData,
+                  ),
+                );
+              },
               footerBuilder: _buildFooter,
               cardBuilder: (_, column, columnItem) => _buildCard(
                 context: context,
@@ -183,34 +189,39 @@ class _BoardContentState extends State<_BoardContent> {
   }
 
   Widget _buildFooter(BuildContext context, AppFlowyGroupData columnData) {
+    final isEditable =
+        context.read<PageAccessLevelBloc?>()?.state.isEditable ?? false;
     final style = Theme.of(context);
 
     return SizedBox(
       height: 42,
       width: double.infinity,
-      child: TextButton.icon(
-        style: TextButton.styleFrom(
-          padding: const EdgeInsets.only(left: 8),
-          alignment: Alignment.centerLeft,
-        ),
-        icon: FlowySvg(
-          FlowySvgs.add_m,
-          color: style.colorScheme.onSurface,
-        ),
-        label: Text(
-          LocaleKeys.board_column_createNewCard.tr(),
-          style: style.textTheme.bodyMedium?.copyWith(
+      child: IgnorePointer(
+        ignoring: !isEditable,
+        child: TextButton.icon(
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.only(left: 8),
+            alignment: Alignment.centerLeft,
+          ),
+          icon: FlowySvg(
+            FlowySvgs.add_m,
             color: style.colorScheme.onSurface,
           ),
-        ),
-        onPressed: () => context.read<BoardBloc>().add(
-              BoardEvent.createRow(
-                columnData.id,
-                OrderObjectPositionTypePB.End,
-                null,
-                null,
-              ),
+          label: Text(
+            LocaleKeys.board_column_createNewCard.tr(),
+            style: style.textTheme.bodyMedium?.copyWith(
+              color: style.colorScheme.onSurface,
             ),
+          ),
+          onPressed: () => context.read<BoardBloc>().add(
+                BoardEvent.createRow(
+                  columnData.id,
+                  OrderObjectPositionTypePB.End,
+                  null,
+                  null,
+                ),
+              ),
+        ),
       ),
     );
   }
@@ -230,34 +241,43 @@ class _BoardContentState extends State<_BoardContent> {
         CardCellBuilder(databaseController: boardBloc.databaseController);
 
     final groupItemId = groupItem.row.id + groupData.group.groupId;
+    final isLocked =
+        context.read<PageAccessLevelBloc?>()?.state.isLocked ?? false;
 
     return Container(
       key: ValueKey(groupItemId),
       margin: cardMargin,
       decoration: _makeBoxDecoration(context),
-      child: RowCard(
-        fieldController: boardBloc.fieldController,
-        rowMeta: rowMeta,
-        viewId: boardBloc.viewId,
-        rowCache: boardBloc.rowCache,
-        groupingFieldId: groupItem.fieldInfo.id,
-        isEditing: false,
-        cellBuilder: cellBuilder,
-        onTap: (context) {
-          context.push(
-            MobileRowDetailPage.routeName,
-            extra: {
-              MobileRowDetailPage.argRowId: rowMeta.id,
-              MobileRowDetailPage.argDatabaseController:
-                  context.read<BoardBloc>().databaseController,
+      child: BlocProvider.value(
+        value: boardBloc,
+        child: IgnorePointer(
+          ignoring: isLocked,
+          child: RowCard(
+            fieldController: boardBloc.fieldController,
+            rowMeta: rowMeta,
+            viewId: boardBloc.viewId,
+            rowCache: boardBloc.rowCache,
+            groupingFieldId: groupItem.fieldInfo.id,
+            isEditing: false,
+            cellBuilder: cellBuilder,
+            onTap: (context) {
+              context.push(
+                MobileRowDetailPage.routeName,
+                extra: {
+                  MobileRowDetailPage.argRowId: rowMeta.id,
+                  MobileRowDetailPage.argDatabaseController:
+                      context.read<BoardBloc>().databaseController,
+                },
+              );
             },
-          );
-        },
-        onStartEditing: () {},
-        onEndEditing: () {},
-        styleConfiguration: RowCardStyleConfiguration(
-          cellStyleMap: mobileBoardCardCellStyleMap(context),
-          showAccessory: false,
+            onStartEditing: () {},
+            onEndEditing: () {},
+            styleConfiguration: RowCardStyleConfiguration(
+              cellStyleMap: mobileBoardCardCellStyleMap(context),
+              showAccessory: false,
+            ),
+            userProfile: boardBloc.userProfile,
+          ),
         ),
       ),
     );
@@ -271,14 +291,20 @@ class _BoardContentState extends State<_BoardContent> {
       border: themeMode == ThemeMode.light
           ? Border.fromBorderSide(
               BorderSide(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                color: Theme.of(context)
+                    .colorScheme
+                    .outline
+                    .withValues(alpha: 0.5),
               ),
             )
           : null,
       boxShadow: themeMode == ThemeMode.light
           ? [
               BoxShadow(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                color: Theme.of(context)
+                    .colorScheme
+                    .outline
+                    .withValues(alpha: 0.5),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),

@@ -5,6 +5,7 @@ import 'package:appflowy/user/application/reminder/reminder_extension.dart';
 import 'package:appflowy/workspace/application/settings/date_time/date_format_ext.dart';
 import 'package:appflowy/workspace/application/settings/date_time/time_format_ext.dart';
 import 'package:appflowy/workspace/application/view/prelude.dart';
+import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
@@ -23,58 +24,81 @@ class NotificationReminderBloc
       await event.when(
         initial: (reminder, dateFormat, timeFormat) async {
           this.reminder = reminder;
+          this.dateFormat = dateFormat;
+          this.timeFormat = timeFormat;
 
-          final createdAt = await _getCreatedAt(
+          add(const NotificationReminderEvent.reset());
+        },
+        reset: () async {
+          final scheduledAt = await _getScheduledAt(
             reminder,
             dateFormat,
             timeFormat,
           );
           final view = await _getView(reminder);
-          final node = await _getContent(reminder);
 
-          if (view == null || node == null) {
+          if (view == null) {
             emit(
               NotificationReminderState(
-                createdAt: createdAt,
+                scheduledAt: scheduledAt,
                 pageTitle: '',
                 reminderContent: '',
+                isLocked: false,
                 status: NotificationReminderStatus.error,
               ),
             );
-          } else {
+            return;
+          }
+
+          final layout = view.layout;
+
+          if (layout.isDocumentView) {
+            final node = await _getContent(reminder);
+            if (node != null) {
+              emit(
+                NotificationReminderState(
+                  scheduledAt: scheduledAt,
+                  pageTitle: view.nameOrDefault,
+                  isLocked: view.isLocked,
+                  view: view,
+                  reminderContent: node.delta?.toPlainText() ?? '',
+                  nodes: [node],
+                  status: NotificationReminderStatus.loaded,
+                  blockId: reminder.meta[ReminderMetaKeys.blockId],
+                ),
+              );
+            }
+          } else if (layout.isDatabaseView) {
             emit(
               NotificationReminderState(
-                createdAt: createdAt,
-                pageTitle: view.name,
+                scheduledAt: scheduledAt,
+                pageTitle: view.nameOrDefault,
+                isLocked: view.isLocked,
                 view: view,
-                reminderContent: node.delta?.toPlainText() ?? '',
-                nodes: [node],
+                reminderContent: reminder.message,
                 status: NotificationReminderStatus.loaded,
               ),
             );
           }
         },
-        reset: () {},
       );
     });
   }
 
   late final ReminderPB reminder;
+  late final UserDateFormatPB dateFormat;
+  late final UserTimeFormatPB timeFormat;
 
-  Future<String> _getCreatedAt(
+  Future<String> _getScheduledAt(
     ReminderPB reminder,
     UserDateFormatPB dateFormat,
     UserTimeFormatPB timeFormat,
   ) async {
-    final rCreatedAt = reminder.createdAt;
-    final createdAt = rCreatedAt != null
-        ? _formatTimestamp(
-            rCreatedAt,
-            timeFormat: timeFormat,
-            dateFormate: dateFormat,
-          )
-        : '';
-    return createdAt;
+    return _formatTimestamp(
+      reminder.scheduledAt.toInt() * 1000,
+      timeFormat: timeFormat,
+      dateFormate: dateFormat,
+    );
   }
 
   Future<ViewPB?> _getView(ReminderPB reminder) async {
@@ -176,19 +200,22 @@ class NotificationReminderState with _$NotificationReminderState {
   const NotificationReminderState._();
 
   const factory NotificationReminderState({
-    required String createdAt,
+    required String scheduledAt,
     required String pageTitle,
     required String reminderContent,
+    required bool isLocked,
     @Default(NotificationReminderStatus.initial)
     NotificationReminderStatus status,
     @Default([]) List<Node> nodes,
+    String? blockId,
     ViewPB? view,
   }) = _NotificationReminderState;
 
   factory NotificationReminderState.initial() =>
       const NotificationReminderState(
-        createdAt: '',
+        scheduledAt: '',
         pageTitle: '',
         reminderContent: '',
+        isLocked: false,
       );
 }

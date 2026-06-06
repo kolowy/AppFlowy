@@ -1,26 +1,27 @@
+use crate::EventIntegrationTest;
+use flowy_user::errors::{internal_error, FlowyError, FlowyResult};
+use lib_dispatch::prelude::{
+  AFPluginDispatcher, AFPluginEventResponse, AFPluginFromBytes, AFPluginRequest, ToBytes, *,
+};
+use std::sync::Arc;
 use std::{
   convert::TryFrom,
   fmt::{Debug, Display},
   hash::Hash,
-  sync::Arc,
 };
+use tokio::task::LocalSet;
 
-use flowy_user::errors::{internal_error, FlowyError};
-use lib_dispatch::prelude::{
-  AFPluginDispatcher, AFPluginEventResponse, AFPluginFromBytes, AFPluginRequest, ToBytes, *,
-};
-
-use crate::EventIntegrationTest;
-
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct EventBuilder {
   context: TestContext,
+  local_set: LocalSet,
 }
 
 impl EventBuilder {
   pub fn new(sdk: EventIntegrationTest) -> Self {
     Self {
       context: TestContext::new(sdk),
+      local_set: Default::default(),
     }
   }
 
@@ -50,12 +51,18 @@ impl EventBuilder {
 
   pub async fn async_send(mut self) -> Self {
     let request = self.get_request();
-    let resp = AFPluginDispatcher::async_send(self.dispatch().as_ref(), request).await;
+    let resp = self
+      .local_set
+      .run_until(AFPluginDispatcher::async_send(
+        self.dispatch().as_ref(),
+        request,
+      ))
+      .await;
     self.context.response = Some(resp);
     self
   }
 
-  pub fn parse<R>(self) -> R
+  pub fn parse_or_panic<R>(self) -> R
   where
     R: AFPluginFromBytes,
   {
@@ -65,6 +72,20 @@ impl EventBuilder {
       Ok(Err(e)) => {
         panic!("Parser {:?} failed: {:?}", std::any::type_name::<R>(), e)
       },
+      Err(e) => {
+        panic!("Parser {:?} failed: {:?}", std::any::type_name::<R>(), e)
+      },
+    }
+  }
+
+  pub fn parse<R>(self) -> FlowyResult<R>
+  where
+    R: AFPluginFromBytes,
+  {
+    let response = self.get_response();
+    match response.clone().parse::<R, FlowyError>() {
+      Ok(Ok(data)) => Ok(data),
+      Ok(Err(e)) => Err(e),
       Err(e) => {
         panic!("Parser {:?} failed: {:?}", std::any::type_name::<R>(), e)
       },

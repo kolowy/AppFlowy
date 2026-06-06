@@ -1,10 +1,11 @@
 import 'dart:io';
 
+import 'package:appflowy/features/workspace/data/repositories/rust_workspace_repository_impl.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/mobile/presentation/favorite/mobile_favorite_folder.dart';
 import 'package:appflowy/mobile/presentation/home/mobile_home_page_header.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/user/application/auth/auth_service.dart';
-import 'package:appflowy/workspace/application/user/prelude.dart';
 import 'package:appflowy/workspace/presentation/home/errors/workspace_failed_screen.dart';
 import 'package:appflowy_backend/dispatch/dispatch.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/workspace.pb.dart';
@@ -31,9 +32,9 @@ class MobileFavoriteScreen extends StatelessWidget {
           return const Center(child: CircularProgressIndicator.adaptive());
         }
 
-        final workspaceSetting = snapshots.data?[0].fold(
-          (workspaceSettingPB) {
-            return workspaceSettingPB as WorkspaceSettingPB?;
+        final latest = snapshots.data?[0].fold(
+          (latest) {
+            return latest as WorkspaceLatestPB?;
           },
           (error) => null,
         );
@@ -46,16 +47,20 @@ class MobileFavoriteScreen extends StatelessWidget {
 
         // In the unlikely case either of the above is null, eg.
         // when a workspace is already open this can happen.
-        if (workspaceSetting == null || userProfile == null) {
+        if (latest == null || userProfile == null) {
           return const WorkspaceFailedScreen();
         }
 
         return Scaffold(
           body: SafeArea(
             child: BlocProvider(
-              create: (_) => UserWorkspaceBloc(userProfile: userProfile)
-                ..add(
-                  const UserWorkspaceEvent.initial(),
+              create: (_) => UserWorkspaceBloc(
+                userProfile: userProfile,
+                repository: RustWorkspaceRepositoryImpl(
+                  userId: userProfile.id,
+                ),
+              )..add(
+                  UserWorkspaceEvent.initialize(),
                 ),
               child: BlocBuilder<UserWorkspaceBloc, UserWorkspaceState>(
                 buildWhen: (previous, current) =>

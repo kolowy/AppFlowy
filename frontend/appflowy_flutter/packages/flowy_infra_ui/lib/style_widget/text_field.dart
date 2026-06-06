@@ -38,6 +38,10 @@ class FlowyTextField extends StatefulWidget {
   final bool isDense;
   final bool readOnly;
   final Color? enableBorderColor;
+  final double? cursorHeight;
+  final BorderRadius? borderRadius;
+  final void Function()? onTap;
+  final Function(PointerDownEvent)? onTapOutside;
 
   const FlowyTextField({
     super.key,
@@ -74,6 +78,10 @@ class FlowyTextField extends StatefulWidget {
     this.isDense = true,
     this.readOnly = false,
     this.enableBorderColor,
+    this.borderRadius,
+    this.onTap,
+    this.onTapOutside,
+    this.cursorHeight,
   });
 
   @override
@@ -147,6 +155,7 @@ class FlowyTextFieldState extends State<FlowyTextField> {
   @override
   Widget build(BuildContext context) {
     return TextField(
+      cursorHeight: widget.cursorHeight,
       readOnly: widget.readOnly,
       controller: controller,
       focusNode: focusNode,
@@ -159,6 +168,8 @@ class FlowyTextFieldState extends State<FlowyTextField> {
       },
       onSubmitted: _onSubmitted,
       onEditingComplete: widget.onEditingComplete,
+      onTap: widget.onTap,
+      onTapOutside: widget.onTapOutside,
       minLines: 1,
       maxLines: widget.maxLines,
       maxLength: widget.maxLength,
@@ -180,7 +191,7 @@ class FlowyTextFieldState extends State<FlowyTextField> {
                   (widget.maxLines == null || widget.maxLines! > 1) ? 12 : 0,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: Corners.s8Border,
+              borderRadius: widget.borderRadius ?? Corners.s8Border,
               borderSide: BorderSide(
                 color: widget.enableBorderColor ??
                     Theme.of(context).colorScheme.outline,
@@ -202,7 +213,7 @@ class FlowyTextFieldState extends State<FlowyTextField> {
             suffixText: widget.showCounter ? _suffixText() : "",
             counterText: "",
             focusedBorder: OutlineInputBorder(
-              borderRadius: Corners.s8Border,
+              borderRadius: widget.borderRadius ?? Corners.s8Border,
               borderSide: BorderSide(
                 color: widget.readOnly
                     ? widget.enableBorderColor ??
@@ -214,13 +225,13 @@ class FlowyTextFieldState extends State<FlowyTextField> {
               borderSide: BorderSide(
                 color: Theme.of(context).colorScheme.error,
               ),
-              borderRadius: Corners.s8Border,
+              borderRadius: widget.borderRadius ?? Corners.s8Border,
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderSide: BorderSide(
                 color: Theme.of(context).colorScheme.error,
               ),
-              borderRadius: Corners.s8Border,
+              borderRadius: widget.borderRadius ?? Corners.s8Border,
             ),
             prefixIcon: widget.prefixIcon,
             suffixIcon: widget.suffixIcon,

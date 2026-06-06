@@ -4,18 +4,23 @@ import 'package:appflowy/mobile/presentation/bottom_sheet/bottom_sheet.dart';
 import 'package:appflowy/mobile/presentation/home/space/mobile_space_header.dart';
 import 'package:appflowy/mobile/presentation/home/space/mobile_space_menu.dart';
 import 'package:appflowy/mobile/presentation/page_item/mobile_view_item.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
+import 'package:appflowy/shared/list_extension.dart';
 import 'package:appflowy/workspace/application/sidebar/folder/folder_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/space/space_bloc.dart';
 import 'package:appflowy/workspace/application/view/view_bloc.dart';
 import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy/workspace/presentation/home/home_sizes.dart';
+import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class MobileSpace extends StatelessWidget {
-  const MobileSpace({super.key});
+  const MobileSpace({
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +66,8 @@ class MobileSpace extends StatelessWidget {
       useRootNavigator: true,
       title: LocaleKeys.space_title.tr(),
       backgroundColor: Theme.of(context).colorScheme.surface,
+      enableScrollable: true,
+      bottomSheetPadding: context.bottomSheetPadding(),
       builder: (_) {
         return BlocProvider.value(
           value: context.read<SpaceBloc>(),
@@ -91,9 +98,10 @@ class MobileSpace extends StatelessWidget {
             Navigator.of(sheetContext).pop();
             context.read<SpaceBloc>().add(
                   SpaceEvent.createPage(
-                    name: LocaleKeys.menuAppHeader_defaultNewPageName.tr(),
+                    name: '',
                     layout: layout,
                     index: 0,
+                    openAfterCreate: true,
                   ),
                 );
             context.read<SpaceBloc>().add(
@@ -124,8 +132,15 @@ class _Pages extends StatelessWidget {
           final spaceType = space.spacePermission == SpacePermission.publicToAll
               ? FolderSpaceType.public
               : FolderSpaceType.private;
+          final childViews = state.view.childViews.unique((view) => view.id);
+          if (childViews.length != state.view.childViews.length) {
+            final duplicatedViews = state.view.childViews
+                .where((view) => childViews.contains(view))
+                .toList();
+            Log.error('some view id are duplicated: $duplicatedViews');
+          }
           return Column(
-            children: state.view.childViews
+            children: childViews
                 .map(
                   (view) => MobileViewItem(
                     key: ValueKey(
@@ -137,7 +152,14 @@ class _Pages extends StatelessWidget {
                     level: 0,
                     leftPadding: HomeSpaceViewSizes.leftPadding,
                     isFeedback: false,
-                    onSelected: context.pushView,
+                    onSelected: (v) => context.pushView(
+                      v,
+                      tabs: [
+                        PickerTabType.emoji,
+                        PickerTabType.icon,
+                        PickerTabType.custom,
+                      ].map((e) => e.name).toList(),
+                    ),
                     endActionPane: (context) {
                       final view = context.read<ViewBloc>().state.view;
                       final actions = [

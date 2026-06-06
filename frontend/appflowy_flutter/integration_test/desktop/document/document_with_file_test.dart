@@ -33,12 +33,10 @@ void main() {
       // tap the first line of the document
       await tester.editor.tapLineOfEditorAt(0);
       await tester.editor.showSlashMenu();
-      await tester.editor.tapSlashMenuItemWithName('File');
+      await tester.editor.tapSlashMenuItemWithName(
+        LocaleKeys.document_slashMenu_name_file.tr(),
+      );
       expect(find.byType(FileBlockComponent), findsOneWidget);
-
-      await tester.tap(find.byType(FileBlockComponent));
-      await tester.pumpAndSettle(const Duration(seconds: 1));
-
       expect(find.byType(FileUploadMenu), findsOneWidget);
 
       final image = await rootBundle.load('assets/test/images/sample.jpeg');
@@ -49,9 +47,7 @@ void main() {
       mockPickFilePaths(paths: [filePath]);
 
       await getIt<KeyValueStorage>().set(KVKeys.kCloudType, '0');
-      await tester.tap(
-        find.text(LocaleKeys.document_plugins_file_fileUploadHint.tr()),
-      );
+      await tester.tapFileUploadHint();
       await tester.pumpAndSettle();
 
       expect(find.byType(FileUploadMenu), findsNothing);
@@ -111,11 +107,10 @@ void main() {
       // tap the first line of the document
       await tester.editor.tapLineOfEditorAt(0);
       await tester.editor.showSlashMenu();
-      await tester.editor.tapSlashMenuItemWithName('File');
+      await tester.editor.tapSlashMenuItemWithName(
+        LocaleKeys.document_slashMenu_name_file.tr(),
+      );
       expect(find.byType(FileBlockComponent), findsOneWidget);
-
-      await tester.tap(find.byType(FileBlockComponent));
-      await tester.pumpAndSettle(const Duration(seconds: 1));
       expect(find.byType(FileUploadMenu), findsOneWidget);
 
       // Navigate to integrate link tab

@@ -4,23 +4,6 @@ use flowy_folder::entities::icon::{UpdateViewIconPayloadPB, ViewIconPB, ViewIcon
 use flowy_folder::entities::*;
 use flowy_user::errors::ErrorCode;
 
-#[tokio::test]
-async fn create_workspace_event_test() {
-  let test = EventIntegrationTest::new_anon().await;
-  let request = CreateWorkspacePayloadPB {
-    name: "my second workspace".to_owned(),
-    desc: "".to_owned(),
-  };
-  let view_pb = EventBuilder::new(test)
-    .event(flowy_folder::event_map::FolderEvent::CreateFolderWorkspace)
-    .payload(request)
-    .async_send()
-    .await
-    .parse::<flowy_folder::entities::ViewPB>();
-
-  assert_eq!(view_pb.parent_view_id, "my second workspace".to_owned());
-}
-
 // #[tokio::test]
 // async fn open_workspace_event_test() {
 //   let test = EventIntegrationTest::new_with_guest_user().await;
@@ -196,7 +179,7 @@ async fn delete_view_permanently_event_test() {
     .event(flowy_folder::event_map::FolderEvent::ListTrashItems)
     .async_send()
     .await
-    .parse::<flowy_folder::entities::RepeatedTrashPB>()
+    .parse_or_panic::<flowy_folder::entities::RepeatedTrashPB>()
     .items;
   assert_eq!(trash.len(), 1);
   assert_eq!(trash[0].id, view.id);
@@ -218,7 +201,7 @@ async fn delete_view_permanently_event_test() {
     .event(flowy_folder::event_map::FolderEvent::ListTrashItems)
     .async_send()
     .await
-    .parse::<flowy_folder::entities::RepeatedTrashPB>()
+    .parse_or_panic::<flowy_folder::entities::RepeatedTrashPB>()
     .items;
   assert!(trash.is_empty());
 }
@@ -247,7 +230,7 @@ async fn delete_all_trash_test() {
     .event(flowy_folder::event_map::FolderEvent::ListTrashItems)
     .async_send()
     .await
-    .parse::<flowy_folder::entities::RepeatedTrashPB>()
+    .parse_or_panic::<flowy_folder::entities::RepeatedTrashPB>()
     .items;
   assert_eq!(trash.len(), 3);
 
@@ -262,7 +245,7 @@ async fn delete_all_trash_test() {
     .event(flowy_folder::event_map::FolderEvent::ListTrashItems)
     .async_send()
     .await
-    .parse::<flowy_folder::entities::RepeatedTrashPB>()
+    .parse_or_panic::<flowy_folder::entities::RepeatedTrashPB>()
     .items;
   assert!(trash.is_empty());
 }
@@ -327,7 +310,7 @@ async fn multiple_hierarchy_view_test() {
         .payload(payload)
         .async_send()
         .await
-        .parse::<flowy_folder::entities::ViewPB>();
+        .parse_or_panic::<flowy_folder::entities::ViewPB>();
       assert_eq!(child.name, format!("My {}-{} view", i + 1, j + 1));
       assert_eq!(child.child_views.len(), 1);
       // By default only the first level of child views will be loaded
@@ -462,35 +445,6 @@ async fn move_view_event_after_delete_view_test2() {
   assert_eq!(views[1].name, "My 1-4 view");
   assert_eq!(views[2].name, "My 1-1 view");
   assert_eq!(views[3].name, "My 1-5 view");
-}
-
-#[tokio::test]
-async fn create_parent_view_with_invalid_name() {
-  for (name, code) in invalid_workspace_name_test_case() {
-    let sdk = EventIntegrationTest::new().await;
-    let request = CreateWorkspacePayloadPB {
-      name,
-      desc: "".to_owned(),
-    };
-    assert_eq!(
-      EventBuilder::new(sdk)
-        .event(flowy_folder::event_map::FolderEvent::CreateFolderWorkspace)
-        .payload(request)
-        .async_send()
-        .await
-        .error()
-        .unwrap()
-        .code,
-      code
-    )
-  }
-}
-
-fn invalid_workspace_name_test_case() -> Vec<(String, ErrorCode)> {
-  vec![
-    ("".to_owned(), ErrorCode::WorkspaceNameInvalid),
-    ("1234".repeat(100), ErrorCode::WorkspaceNameTooLong),
-  ]
 }
 
 #[tokio::test]

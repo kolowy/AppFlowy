@@ -1,3 +1,4 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/plugins/database/application/row/related_row_detail_bloc.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,14 +23,17 @@ class RelatedRowDetailPage extends StatelessWidget {
         initialRowId: rowId,
       ),
       child: BlocBuilder<RelatedRowDetailPageBloc, RelatedRowDetailPageState>(
-        builder: (context, state) {
+        builder: (_, state) {
           return state.when(
             loading: () => const SizedBox.shrink(),
             ready: (databaseController, rowController) {
-              return RowDetailPage(
-                databaseController: databaseController,
-                rowController: rowController,
-                allowOpenAsFullPage: false,
+              return BlocProvider.value(
+                value: context.read<UserWorkspaceBloc>(),
+                child: RowDetailPage(
+                  databaseController: databaseController,
+                  rowController: rowController,
+                  allowOpenAsFullPage: false,
+                ),
               );
             },
           );

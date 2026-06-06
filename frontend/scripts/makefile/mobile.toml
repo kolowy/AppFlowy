@@ -26,7 +26,22 @@ private = true
 script = [
   """
     cd rust-lib/
-    rustup show
+    
+    # Set environment variables for iOS simulator builds to fix bindgen issues
+    # This prevents the "stdbool.h file not found" error when building for iOS simulator
+    # Fix the issue:
+    # error: version 'sim' in target triple 'arm64-apple-ios-sim' is invalid
+    # rocksdb/include/rocksdb/c.h:65:10: fatal error: 'stdbool.h' file not found
+    #
+
+    if [[ "${RUST_COMPILE_TARGET}" == *"ios-sim"* ]]; then
+      echo "🔧 Setting up environment for iOS Simulator build..."
+      export SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+      export BINDGEN_EXTRA_CLANG_ARGS="-target arm64-apple-ios14.0-simulator -isysroot $(xcrun --sdk iphonesimulator --show-sdk-path)"
+      echo "📱 SDKROOT: $SDKROOT"
+      echo "🛠️  BINDGEN_EXTRA_CLANG_ARGS: $BINDGEN_EXTRA_CLANG_ARGS"
+    fi
+    
     if [ "${BUILD_FLAG}" = "debug" ]; then
       echo "🚀 🚀 🚀  Building iOS SDK for debug"
       cargo lipo --targets ${RUST_COMPILE_TARGET} --features "${FLUTTER_DESKTOP_FEATURES}" --package=dart-ffi
@@ -68,10 +83,10 @@ script = [
     cd rust-lib/
     if [ "${BUILD_FLAG}" = "debug" ]; then
       echo "🚀 🚀 🚀  Building Android SDK for debug"
-      cargo ndk -t arm64-v8a -t armeabi-v7a -o ./jniLibs build --features "${FLUTTER_DESKTOP_FEATURES}" --package=dart-ffi
+      cargo ndk -t arm64-v8a -o ./jniLibs build --features "${FLUTTER_DESKTOP_FEATURES}" --package=dart-ffi
     else
       echo "🚀 🚀 🚀  Building Android SDK for release"
-      cargo ndk -t arm64-v8a -t armeabi-v7a -o ./jniLibs build --features "${FLUTTER_DESKTOP_FEATURES}" --package=dart-ffi --release
+      cargo ndk -t arm64-v8a -o ./jniLibs build --features "${FLUTTER_DESKTOP_FEATURES}" --package=dart-ffi --release
     fi
     cd ../
   """,
@@ -98,9 +113,6 @@ script = [
     echo "🚀 🚀 🚀  AppFlowy-Core for iOS platform build success"
     dart_ffi_dir= set ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/appflowy_flutter/packages/appflowy_backend/${TARGET_OS}
     lib = set lib${LIB_NAME}.${LIB_EXT}
-
-    ls -a ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/rust-lib/target/${RUST_COMPILE_TARGET}/${BUILD_FLAG}
-
 
     echo "💻 💻 💻  Copying ${CARGO_MAKE_WORKSPACE_WORKING_DIRECTORY}/rust-lib/target/${RUST_COMPILE_TARGET}/${BUILD_FLAG}/${lib} to ${dart_ffi_dir}/${lib}"
     rm -f ${dart_ffi_dir}/${lib}

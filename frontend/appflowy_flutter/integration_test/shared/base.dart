@@ -1,24 +1,27 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
-
+import 'package:appflowy/ai/service/appflowy_ai_service.dart';
 import 'package:appflowy/env/cloud_env.dart';
 import 'package:appflowy/env/cloud_env_test.dart';
 import 'package:appflowy/startup/entry_point.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/user/application/auth/af_cloud_mock_auth_service.dart';
 import 'package:appflowy/user/application/auth/auth_service.dart';
-import 'package:appflowy/user/application/auth/supabase_mock_auth_service.dart';
 import 'package:appflowy/user/presentation/presentation.dart';
 import 'package:appflowy/user/presentation/screens/sign_in_screen/widgets/widgets.dart';
 import 'package:appflowy/workspace/application/settings/prelude.dart';
 import 'package:flowy_infra/uuid.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:universal_platform/universal_platform.dart';
+
+import 'mock/mock_ai.dart';
 
 class FlowyTestContext {
   FlowyTestContext({required this.applicationDataDirectory});
@@ -33,13 +36,14 @@ extension AppFlowyTestBase on WidgetTester {
     // use to specify the application data directory, if not specified, a temporary directory will be used.
     String? dataDirectory,
     Size windowSize = const Size(1600, 1200),
-    AuthenticatorType? cloudType,
     String? email,
+    AuthenticatorType? cloudType,
+    AIRepository Function()? aiRepositoryBuilder,
   }) async {
     if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      // Set the window size
       await binding.setSurfaceSize(windowSize);
     }
+    //cloudType = AuthenticatorType.appflowyCloudDevelop;
 
     mockHotKeyManagerHandlers();
     final applicationDataDirectory = dataDirectory ??
@@ -50,57 +54,87 @@ extension AppFlowyTestBase on WidgetTester {
     await FlowyRunner.run(
       AppFlowyApplication(),
       IntegrationMode.integrationTest,
-      rustEnvsBuilder: () {
-        final rustEnvs = <String, String>{};
-        if (cloudType != null) {
-          switch (cloudType) {
-            case AuthenticatorType.local:
-              break;
-            case AuthenticatorType.supabase:
-              break;
-            case AuthenticatorType.appflowyCloudSelfHost:
-              rustEnvs["GOTRUE_ADMIN_EMAIL"] = "admin@example.com";
-              rustEnvs["GOTRUE_ADMIN_PASSWORD"] = "password";
-              break;
-            default:
-              throw Exception("not supported");
-          }
-        }
-        return rustEnvs;
-      },
-      didInitGetItCallback: () {
-        return Future(
-          () async {
-            if (cloudType != null) {
-              switch (cloudType) {
-                case AuthenticatorType.local:
-                  await useLocalServer();
-                  break;
-                case AuthenticatorType.supabase:
-                  await useTestSupabaseCloud();
-                  getIt.unregister<AuthService>();
-                  getIt.registerFactory<AuthService>(
-                    () => SupabaseMockAuthService(),
-                  );
-                  break;
-                case AuthenticatorType.appflowyCloudSelfHost:
-                  await useTestSelfHostedAppFlowyCloud();
-                  getIt.unregister<AuthService>();
-                  getIt.registerFactory<AuthService>(
-                    () => AppFlowyCloudMockAuthService(email: email),
-                  );
-                default:
-                  throw Exception("not supported");
-              }
-            }
-          },
-        );
-      },
+      rustEnvsBuilder: () => _buildRustEnvs(cloudType),
+      didInitGetItCallback: () => _initializeCloudServices(
+        cloudType: cloudType,
+        email: email,
+        aiRepositoryBuilder: aiRepositoryBuilder,
+      ),
     );
 
     await waitUntilSignInPageShow();
     return FlowyTestContext(
       applicationDataDirectory: applicationDataDirectory,
+    );
+  }
+
+  Map<String, String> _buildRustEnvs(AuthenticatorType? cloudType) {
+    final rustEnvs = <String, String>{};
+    if (cloudType != null) {
+      switch (cloudType) {
+        case AuthenticatorType.local:
+          break;
+        case AuthenticatorType.appflowyCloudSelfHost:
+        case AuthenticatorType.appflowyCloudDevelop:
+          rustEnvs["GOTRUE_ADMIN_EMAIL"] = "admin@example.com";
+          rustEnvs["GOTRUE_ADMIN_PASSWORD"] = "password";
+          break;
+        default:
+          throw Exception("Unsupported cloud type: $cloudType");
+      }
+    }
+    return rustEnvs;
+  }
+
+  Future<void> _initializeCloudServices({
+    required AuthenticatorType? cloudType,
+    String? email,
+    AIRepository Function()? aiRepositoryBuilder,
+  }) async {
+    if (cloudType == null) return;
+
+    switch (cloudType) {
+      case AuthenticatorType.local:
+        await useLocalServer();
+        break;
+      case AuthenticatorType.appflowyCloudSelfHost:
+        await _setupAppFlowyCloud(
+          useLocal: false,
+          email: email,
+          aiRepositoryBuilder: aiRepositoryBuilder,
+        );
+        break;
+      case AuthenticatorType.appflowyCloudDevelop:
+        await _setupAppFlowyCloud(
+          useLocal: integrationMode().isDevelop,
+          email: email,
+          aiRepositoryBuilder: aiRepositoryBuilder,
+        );
+        break;
+      default:
+        throw Exception("Unsupported cloud type: $cloudType");
+    }
+  }
+
+  Future<void> _setupAppFlowyCloud({
+    required bool useLocal,
+    String? email,
+    AIRepository Function()? aiRepositoryBuilder,
+  }) async {
+    if (useLocal) {
+      await useAppFlowyCloudDevelop("http://localhost");
+    } else {
+      await useSelfHostedAppFlowyCloud(TestEnv.afCloudUrl);
+    }
+
+    getIt.unregister<AuthService>();
+    getIt.unregister<AIRepository>();
+
+    getIt.registerFactory<AuthService>(
+      () => AppFlowyCloudMockAuthService(email: email),
+    );
+    getIt.registerFactory<AIRepository>(
+      aiRepositoryBuilder ?? () => MockAIRepository(),
     );
   }
 
@@ -116,7 +150,7 @@ extension AppFlowyTestBase on WidgetTester {
   }
 
   Future<void> waitUntilSignInPageShow() async {
-    if (isAuthEnabled) {
+    if (isAuthEnabled || UniversalPlatform.isMobile) {
       final finder = find.byType(SignInAnonymousButtonV2);
       await pumpUntilFound(finder, timeout: const Duration(seconds: 30));
       expect(finder, findsOneWidget);
@@ -169,23 +203,45 @@ extension AppFlowyTestBase on WidgetTester {
 
   Future<void> tapButton(
     Finder finder, {
-    int? pointer,
     int buttons = kPrimaryButton,
     bool warnIfMissed = false,
     int milliseconds = 500,
     bool pumpAndSettle = true,
   }) async {
-    await tap(
-      finder,
-      buttons: buttons,
-      warnIfMissed: warnIfMissed,
-    );
+    await tap(finder, buttons: buttons, warnIfMissed: warnIfMissed);
 
     if (pumpAndSettle) {
       await this.pumpAndSettle(
         Duration(milliseconds: milliseconds),
         EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 5),
+        const Duration(seconds: 15),
+      );
+    }
+  }
+
+  Future<void> tapDown(
+    Finder finder, {
+    int? pointer,
+    int buttons = kPrimaryButton,
+    PointerDeviceKind kind = PointerDeviceKind.touch,
+    bool pumpAndSettle = true,
+    int milliseconds = 500,
+  }) async {
+    final location = getCenter(finder);
+    final TestGesture gesture = await startGesture(
+      location,
+      pointer: pointer,
+      buttons: buttons,
+      kind: kind,
+    );
+    await gesture.cancel();
+    await gesture.down(location);
+    await gesture.cancel();
+    if (pumpAndSettle) {
+      await this.pumpAndSettle(
+        Duration(milliseconds: milliseconds),
+        EnginePhase.sendSemanticsUpdate,
+        const Duration(seconds: 15),
       );
     }
   }
@@ -223,6 +279,25 @@ extension AppFlowyTestBase on WidgetTester {
   Future<void> wait(int milliseconds) async {
     await pumpAndSettle(Duration(milliseconds: milliseconds));
   }
+
+  Future<void> slideToValue(
+    Finder slider,
+    double value, {
+    double paddingOffset = 24.0,
+  }) async {
+    final sliderWidget = slider.evaluate().first.widget as Slider;
+    final range = sliderWidget.max - sliderWidget.min;
+    final initialRate = (value - sliderWidget.min) / range;
+    final totalWidth = getSize(slider).width - (2 * paddingOffset);
+    final zeroPoint = getTopLeft(slider) +
+        Offset(
+          paddingOffset + initialRate * totalWidth,
+          getSize(slider).height / 2,
+        );
+    final calculatedOffset = value * (totalWidth / 100);
+    await dragFrom(zeroPoint, Offset(calculatedOffset, 0));
+    await pumpAndSettle();
+  }
 }
 
 extension AppFlowyFinderTestBase on CommonFinders {
@@ -231,17 +306,16 @@ extension AppFlowyFinderTestBase on CommonFinders {
       (widget) => widget is FlowyText && widget.text == text,
     );
   }
-}
 
-Future<void> useTestSupabaseCloud() async {
-  await useSupabaseCloud(
-    url: TestEnv.supabaseUrl,
-    anonKey: TestEnv.supabaseAnonKey,
-  );
-}
-
-Future<void> useTestSelfHostedAppFlowyCloud() async {
-  await useSelfHostedAppFlowyCloudWithURL(TestEnv.afCloudUrl);
+  Finder findFlowyTooltip(String richMessage, {bool skipOffstage = true}) {
+    return byWidgetPredicate(
+      (widget) =>
+          widget is FlowyTooltip &&
+          widget.richMessage != null &&
+          widget.richMessage!.toPlainText().contains(richMessage),
+      skipOffstage: skipOffstage,
+    );
+  }
 }
 
 Future<String> mockApplicationDataStorage({

@@ -1,10 +1,17 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/database/application/field/type_option/relation_type_option_cubit.dart';
 import 'package:appflowy/plugins/database/grid/presentation/layout/sizes.dart';
 import 'package:appflowy/plugins/database/grid/presentation/widgets/common/type_option_separator.dart';
+import 'package:appflowy/plugins/database/tab_bar/tab_bar_view.dart';
 import 'package:appflowy/plugins/database/widgets/row/relation_row_detail.dart';
+import 'package:appflowy/startup/startup.dart';
+import 'package:appflowy/workspace/application/tabs/tabs_bloc.dart';
+import 'package:appflowy/workspace/application/view/view_ext.dart';
+import 'package:appflowy_backend/dispatch/dispatch.dart';
+import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-database2/protobuf.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
 import 'package:collection/collection.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/size.dart';
@@ -106,8 +113,11 @@ class _RelationCellEditorContentState
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: bloc,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: bloc),
+        BlocProvider.value(value: context.read<UserWorkspaceBloc>()),
+      ],
       child: BlocBuilder<RelationRowSearchBloc, RelationRowSearchState>(
         buildWhen: (previous, current) =>
             !listEquals(previous.filteredRows, current.filteredRows),
@@ -126,7 +136,7 @@ class _RelationCellEditorContentState
               shrinkWrap: true,
               slivers: [
                 _CellEditorTitle(
-                  databaseName: widget.relatedDatabaseMeta.databaseName,
+                  databaseMeta: widget.relatedDatabaseMeta,
                 ),
                 _SearchField(
                   focusNode: focusNode,
@@ -204,10 +214,10 @@ class _RelationCellEditorContentState
 
 class _CellEditorTitle extends StatelessWidget {
   const _CellEditorTitle({
-    required this.databaseName,
+    required this.databaseMeta,
   });
 
-  final String databaseName;
+  final DatabaseMeta databaseMeta;
 
   @override
   Widget build(BuildContext context) {
@@ -223,21 +233,48 @@ class _CellEditorTitle extends StatelessWidget {
               fontSize: 11,
               color: Theme.of(context).hintColor,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 4,
-                vertical: 2,
-              ),
-              child: FlowyText.regular(
-                databaseName,
-                fontSize: 11,
-                overflow: TextOverflow.ellipsis,
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => _openRelatedDatbase(context),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: FlowyText.regular(
+                    databaseMeta.databaseName,
+                    fontSize: 11,
+                    overflow: TextOverflow.ellipsis,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _openRelatedDatbase(BuildContext context) {
+    FolderEventGetView(ViewIdPB(value: databaseMeta.viewId))
+        .send()
+        .then((result) {
+      result.fold(
+        (view) {
+          PopoverContainer.of(context).closeAll();
+          Navigator.of(context).maybePop();
+          getIt<TabsBloc>().add(
+            TabsEvent.openPlugin(
+              plugin: DatabaseTabBarViewPlugin(
+                view: view,
+                pluginType: view.pluginType,
+              ),
+            ),
+          );
+        },
+        (err) => Log.error(err),
+      );
+    });
   }
 }
 
@@ -283,13 +320,16 @@ class _SearchField extends StatelessWidget {
                 FlowyOverlay.show(
                   context: context,
                   builder: (BuildContext overlayContext) {
-                    return RelatedRowDetailPage(
-                      databaseId: context
-                          .read<RelationCellBloc>()
-                          .state
-                          .relatedDatabaseMeta!
-                          .databaseId,
-                      rowId: row.rowId,
+                    return BlocProvider.value(
+                      value: context.read<UserWorkspaceBloc>(),
+                      child: RelatedRowDetailPage(
+                        databaseId: context
+                            .read<RelationCellBloc>()
+                            .state
+                            .relatedDatabaseMeta!
+                            .databaseId,
+                        rowId: row.rowId,
+                      ),
                     );
                   },
                 );
@@ -358,13 +398,17 @@ class _RowListItem extends StatelessWidget {
       ),
       child: GestureDetector(
         onTap: () {
+          final userWorkspaceBloc = context.read<UserWorkspaceBloc>();
           if (isSelected) {
             FlowyOverlay.show(
               context: context,
               builder: (BuildContext overlayContext) {
-                return RelatedRowDetailPage(
-                  databaseId: databaseId,
-                  rowId: row.rowId,
+                return BlocProvider.value(
+                  value: userWorkspaceBloc,
+                  child: RelatedRowDetailPage(
+                    databaseId: databaseId,
+                    rowId: row.rowId,
+                  ),
                 );
               },
             );
@@ -385,7 +429,7 @@ class _RowListItem extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: FlowyText.medium(
+                  child: FlowyText(
                     row.name.trim().isEmpty
                         ? LocaleKeys.grid_title_placeholder.tr()
                         : row.name,
@@ -502,7 +546,7 @@ class _RelationCellEditorDatabasePicker extends StatelessWidget {
                                 databaseMeta.databaseId,
                               ),
                             ),
-                        text: FlowyText.medium(
+                        text: FlowyText(
                           databaseMeta.databaseName,
                           overflow: TextOverflow.ellipsis,
                         ),

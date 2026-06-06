@@ -3,14 +3,15 @@ use std::convert::TryFrom;
 
 use bytes::Bytes;
 use collab_database::database::timestamp;
+use collab_database::fields::select_type_option::{
+  MultiSelectTypeOption, SelectOption, SingleSelectTypeOption,
+};
 use collab_database::fields::Field;
 use collab_database::rows::{Row, RowId};
 use flowy_database2::entities::*;
 use flowy_database2::event_map::DatabaseEvent;
 use flowy_database2::services::cell::CellBuilder;
-use flowy_database2::services::field::{
-  MultiSelectTypeOption, SelectOption, SingleSelectTypeOption,
-};
+use flowy_database2::services::field::checklist_filter::ChecklistCellInsertChangeset;
 use flowy_database2::services::share::csv::CSVFormat;
 use flowy_folder::entities::*;
 use flowy_folder::event_map::FolderEvent;
@@ -24,7 +25,7 @@ impl EventIntegrationTest {
     self
       .appflowy_core
       .database_manager
-      .get_database_with_view_id(database_view_id)
+      .get_database_editor_with_view_id(database_view_id)
       .await
       .unwrap()
       .export_csv(CSVFormat::Original)
@@ -37,7 +38,6 @@ impl EventIntegrationTest {
     let payload = CreateViewPayloadPB {
       parent_view_id: parent_id.to_string(),
       name,
-      desc: "".to_string(),
       thumbnail: None,
       layout: ViewLayoutPB::Grid,
       initial_data,
@@ -53,24 +53,24 @@ impl EventIntegrationTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ViewPB>()
+      .parse_or_panic::<ViewPB>()
   }
 
-  pub async fn open_database(&self, view_id: &str) {
+  pub async fn open_database(&self, view_id: &str) -> DatabasePB {
     EventBuilder::new(self.clone())
       .event(DatabaseEvent::GetDatabase)
       .payload(DatabaseViewIdPB {
         value: view_id.to_string(),
       })
       .async_send()
-      .await;
+      .await
+      .parse_or_panic::<DatabasePB>()
   }
 
   pub async fn create_board(&self, parent_id: &str, name: String, initial_data: Vec<u8>) -> ViewPB {
     let payload = CreateViewPayloadPB {
       parent_view_id: parent_id.to_string(),
       name,
-      desc: "".to_string(),
       thumbnail: None,
       layout: ViewLayoutPB::Board,
       initial_data,
@@ -86,7 +86,7 @@ impl EventIntegrationTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ViewPB>()
+      .parse_or_panic::<ViewPB>()
   }
 
   pub async fn create_calendar(
@@ -98,7 +98,6 @@ impl EventIntegrationTest {
     let payload = CreateViewPayloadPB {
       parent_view_id: parent_id.to_string(),
       name,
-      desc: "".to_string(),
       thumbnail: None,
       layout: ViewLayoutPB::Calendar,
       initial_data,
@@ -114,7 +113,7 @@ impl EventIntegrationTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ViewPB>()
+      .parse_or_panic::<ViewPB>()
   }
 
   pub async fn get_database(&self, view_id: &str) -> DatabasePB {
@@ -125,7 +124,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<DatabasePB>()
+      .parse_or_panic::<DatabasePB>()
   }
 
   pub async fn get_all_database_fields(&self, view_id: &str) -> RepeatedFieldPB {
@@ -137,7 +136,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<RepeatedFieldPB>()
+      .parse_or_panic::<RepeatedFieldPB>()
   }
 
   pub async fn create_field(&self, view_id: &str, field_type: FieldType) -> FieldPB {
@@ -150,7 +149,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<FieldPB>()
+      .parse_or_panic::<FieldPB>()
   }
 
   pub async fn update_field(&self, changeset: FieldChangesetPB) {
@@ -173,6 +172,41 @@ impl EventIntegrationTest {
       .error()
   }
 
+  pub async fn remove_calculate(
+    &self,
+    changeset: RemoveCalculationChangesetPB,
+  ) -> Option<FlowyError> {
+    EventBuilder::new(self.clone())
+      .event(DatabaseEvent::RemoveCalculation)
+      .payload(changeset)
+      .async_send()
+      .await
+      .error()
+  }
+
+  pub async fn get_all_calculations(&self, database_view_id: &str) -> RepeatedCalculationsPB {
+    EventBuilder::new(self.clone())
+      .event(DatabaseEvent::GetAllCalculations)
+      .payload(DatabaseViewIdPB {
+        value: database_view_id.to_string(),
+      })
+      .async_send()
+      .await
+      .parse_or_panic::<RepeatedCalculationsPB>()
+  }
+
+  pub async fn update_calculation(
+    &self,
+    changeset: UpdateCalculationChangesetPB,
+  ) -> Option<FlowyError> {
+    EventBuilder::new(self.clone())
+      .event(DatabaseEvent::UpdateCalculation)
+      .payload(changeset)
+      .async_send()
+      .await
+      .error()
+  }
+
   pub async fn update_field_type(
     &self,
     view_id: &str,
@@ -185,6 +219,7 @@ impl EventIntegrationTest {
         view_id: view_id.to_string(),
         field_id: field_id.to_string(),
         field_type,
+        field_name: None,
       })
       .async_send()
       .await
@@ -211,7 +246,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<FieldPB>()
+      .parse_or_panic::<FieldPB>()
   }
   pub async fn summary_row(&self, data: SummaryRowPB) {
     EventBuilder::new(self.clone())
@@ -245,7 +280,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<RowMetaPB>()
+      .parse_or_panic::<RowMetaPB>()
   }
 
   pub async fn delete_row(&self, view_id: &str, row_id: &str) -> Option<FlowyError> {
@@ -263,27 +298,27 @@ impl EventIntegrationTest {
   pub async fn get_row(&self, view_id: &str, row_id: &str) -> OptionalRowPB {
     EventBuilder::new(self.clone())
       .event(DatabaseEvent::GetRow)
-      .payload(RowIdPB {
+      .payload(DatabaseViewRowIdPB {
         view_id: view_id.to_string(),
         row_id: row_id.to_string(),
         group_id: None,
       })
       .async_send()
       .await
-      .parse::<OptionalRowPB>()
+      .parse_or_panic::<OptionalRowPB>()
   }
 
   pub async fn get_row_meta(&self, view_id: &str, row_id: &str) -> RowMetaPB {
     EventBuilder::new(self.clone())
       .event(DatabaseEvent::GetRowMeta)
-      .payload(RowIdPB {
+      .payload(DatabaseViewRowIdPB {
         view_id: view_id.to_string(),
         row_id: row_id.to_string(),
         group_id: None,
       })
       .async_send()
       .await
-      .parse::<RowMetaPB>()
+      .parse_or_panic::<RowMetaPB>()
   }
 
   pub async fn update_row_meta(&self, changeset: UpdateRowMetaChangesetPB) -> Option<FlowyError> {
@@ -298,7 +333,7 @@ impl EventIntegrationTest {
   pub async fn duplicate_row(&self, view_id: &str, row_id: &str) -> Option<FlowyError> {
     EventBuilder::new(self.clone())
       .event(DatabaseEvent::DuplicateRow)
-      .payload(RowIdPB {
+      .payload(DatabaseViewRowIdPB {
         view_id: view_id.to_string(),
         row_id: row_id.to_string(),
         group_id: None,
@@ -349,7 +384,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<CellPB>()
+      .parse_or_panic::<CellPB>()
   }
 
   pub async fn get_text_cell(&self, view_id: &str, row_id: &str, field_id: &str) -> String {
@@ -410,7 +445,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<SelectOptionPB>();
+      .parse_or_panic::<SelectOptionPB>();
 
     EventBuilder::new(self.clone())
       .event(DatabaseEvent::InsertOrUpdateSelectOption)
@@ -433,7 +468,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<RepeatedGroupPB>()
+      .parse_or_panic::<RepeatedGroupPB>()
       .items
   }
 
@@ -472,7 +507,6 @@ impl EventIntegrationTest {
     &self,
     view_id: &str,
     group_id: &str,
-    field_id: &str,
     name: Option<String>,
     visible: Option<bool>,
   ) -> Option<FlowyError> {
@@ -481,7 +515,6 @@ impl EventIntegrationTest {
       .payload(UpdateGroupPB {
         view_id: view_id.to_string(),
         group_id: group_id.to_string(),
-        field_id: field_id.to_string(),
         name,
         visible,
       })
@@ -519,7 +552,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<RepeatedCalendarEventPB>()
+      .parse_or_panic::<RepeatedCalendarEventPB>()
       .items
   }
 
@@ -548,7 +581,7 @@ impl EventIntegrationTest {
       })
       .async_send()
       .await
-      .parse::<RepeatedRelatedRowDataPB>()
+      .parse_or_panic::<RepeatedRelatedRowDataPB>()
       .rows
   }
 }
@@ -590,15 +623,14 @@ impl<'a> TestRowBuilder<'a> {
 
   pub fn insert_date_cell(
     &mut self,
-    date: i64,
-    time: Option<String>,
+    timestamp: i64,
     include_time: Option<bool>,
     field_type: &FieldType,
   ) -> String {
     let date_field = self.field_with_type(field_type);
     self
       .cell_build
-      .insert_date_cell(&date_field.id, date, time, include_time);
+      .insert_date_cell(&date_field.id, timestamp, include_time);
     date_field.id.clone()
   }
 
@@ -626,7 +658,8 @@ impl<'a> TestRowBuilder<'a> {
     let single_select_field = self.field_with_type(&FieldType::SingleSelect);
     let type_option = single_select_field
       .get_type_option::<SingleSelectTypeOption>(FieldType::SingleSelect)
-      .unwrap();
+      .unwrap()
+      .0;
     let option = f(type_option.options);
     self
       .cell_build
@@ -642,7 +675,8 @@ impl<'a> TestRowBuilder<'a> {
     let multi_select_field = self.field_with_type(&FieldType::MultiSelect);
     let type_option = multi_select_field
       .get_type_option::<MultiSelectTypeOption>(FieldType::MultiSelect)
-      .unwrap();
+      .unwrap()
+      .0;
     let options = f(type_option.options);
     let ops_ids = options
       .iter()
@@ -655,11 +689,11 @@ impl<'a> TestRowBuilder<'a> {
     multi_select_field.id.clone()
   }
 
-  pub fn insert_checklist_cell(&mut self, options: Vec<(String, bool)>) -> String {
+  pub fn insert_checklist_cell(&mut self, new_tasks: Vec<ChecklistCellInsertChangeset>) -> String {
     let checklist_field = self.field_with_type(&FieldType::Checklist);
     self
       .cell_build
-      .insert_checklist_cell(&checklist_field.id, options);
+      .insert_checklist_cell(&checklist_field.id, new_tasks);
     checklist_field.id.clone()
   }
 
@@ -667,6 +701,12 @@ impl<'a> TestRowBuilder<'a> {
     let time_field = self.field_with_type(&FieldType::Time);
     self.cell_build.insert_number_cell(&time_field.id, time);
     time_field.id.clone()
+  }
+
+  pub fn insert_media_cell(&mut self, media: String) -> String {
+    let media_field = self.field_with_type(&FieldType::Media);
+    self.cell_build.insert_text_cell(&media_field.id, media);
+    media_field.id.clone()
   }
 
   pub fn field_with_type(&self, field_type: &FieldType) -> Field {

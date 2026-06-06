@@ -1,7 +1,3 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/util/theme_extension.dart';
@@ -17,12 +13,15 @@ import 'package:appflowy/workspace/presentation/home/menu/view/view_item.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/protobuf.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flowy_infra_ui/style_widget/hover.dart';
-import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 class SpacePermissionSwitch extends StatefulWidget {
   const SpacePermissionSwitch({
@@ -141,7 +140,7 @@ class SpacePermissionButton extends StatelessWidget {
 
     return FlowyButton(
       margin: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
-      radius: BorderRadius.circular(10),
+      radius: showArrow ? BorderRadius.circular(10) : BorderRadius.zero,
       iconPadding: 16.0,
       leftIcon: FlowySvg(icon),
       leftIconSize: const Size.square(20),
@@ -175,51 +174,55 @@ class SpaceCancelOrConfirmButton extends StatelessWidget {
     required this.onConfirm,
     required this.confirmButtonName,
     this.confirmButtonColor,
+    this.confirmButtonBuilder,
   });
 
   final VoidCallback onCancel;
   final VoidCallback onConfirm;
   final String confirmButtonName;
   final Color? confirmButtonColor;
+  final WidgetBuilder? confirmButtonBuilder;
 
   @override
   Widget build(BuildContext context) {
+    final theme = AppFlowyTheme.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        DecoratedBox(
-          decoration: ShapeDecoration(
-            shape: RoundedRectangleBorder(
-              side: const BorderSide(color: Color(0x1E14171B)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+        AFOutlinedTextButton.normal(
+          size: UniversalPlatform.isDesktop ? AFButtonSize.m : AFButtonSize.l,
+          text: LocaleKeys.button_cancel.tr(),
+          textStyle: theme.textStyle.body.standard(
+            color: theme.textColorScheme.primary,
           ),
-          child: FlowyButton(
-            useIntrinsicWidth: true,
-            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 9.0),
-            text: FlowyText.regular(LocaleKeys.button_cancel.tr()),
-            onTap: onCancel,
-          ),
+          onTap: onCancel,
         ),
         const HSpace(12.0),
-        DecoratedBox(
-          decoration: ShapeDecoration(
-            color: confirmButtonColor ?? Theme.of(context).colorScheme.primary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        if (confirmButtonBuilder != null) ...[
+          confirmButtonBuilder!(context),
+        ] else ...[
+          DecoratedBox(
+            decoration: ShapeDecoration(
+              color:
+                  confirmButtonColor ?? Theme.of(context).colorScheme.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: FlowyButton(
+              useIntrinsicWidth: true,
+              margin:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 9.0),
+              radius: BorderRadius.circular(8),
+              text: FlowyText.regular(
+                confirmButtonName,
+                lineHeight: 1.0,
+                color: Theme.of(context).colorScheme.onPrimary,
+              ),
+              onTap: onConfirm,
             ),
           ),
-          child: FlowyButton(
-            useIntrinsicWidth: true,
-            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 9.0),
-            radius: BorderRadius.circular(8),
-            text: FlowyText.regular(
-              confirmButtonName,
-              color: Colors.white,
-            ),
-            onTap: onConfirm,
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -242,23 +245,11 @@ class SpaceOkButton extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        DecoratedBox(
-          decoration: ShapeDecoration(
-            color: confirmButtonColor ?? Theme.of(context).colorScheme.primary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          child: FlowyButton(
-            useIntrinsicWidth: true,
-            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 9.0),
-            radius: BorderRadius.circular(8),
-            text: FlowyText.regular(
-              confirmButtonName,
-              color: Colors.white,
-            ),
-            onTap: onConfirm,
-          ),
+        PrimaryRoundedButton(
+          text: confirmButtonName,
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 9.0),
+          radius: 8.0,
+          onTap: onConfirm,
         ),
       ],
     );
@@ -272,17 +263,11 @@ enum ConfirmPopupStyle {
 
 class ConfirmPopupColor {
   static Color titleColor(BuildContext context) {
-    if (Theme.of(context).isLightMode) {
-      return const Color(0xFF171717).withOpacity(0.8);
-    }
-    return const Color(0xFFffffff).withOpacity(0.8);
+    return AppFlowyTheme.of(context).textColorScheme.primary;
   }
 
   static Color descriptionColor(BuildContext context) {
-    if (Theme.of(context).isLightMode) {
-      return const Color(0xFF171717).withOpacity(0.8);
-    }
-    return const Color(0xFFffffff).withOpacity(0.72);
+    return AppFlowyTheme.of(context).textColorScheme.primary;
   }
 }
 
@@ -295,14 +280,21 @@ class ConfirmPopup extends StatefulWidget {
     required this.onConfirm,
     this.onCancel,
     this.confirmLabel,
+    this.titleStyle,
+    this.descriptionStyle,
     this.confirmButtonColor,
+    this.confirmButtonBuilder,
     this.child,
     this.closeOnAction = true,
+    this.showCloseButton = true,
+    this.enableKeyboardListener = true,
   });
 
   final String title;
+  final TextStyle? titleStyle;
   final String description;
-  final VoidCallback onConfirm;
+  final TextStyle? descriptionStyle;
+  final void Function(BuildContext context) onConfirm;
   final VoidCallback? onCancel;
   final Color? confirmButtonColor;
   final ConfirmPopupStyle style;
@@ -326,6 +318,20 @@ class ConfirmPopup extends StatefulWidget {
   ///
   final bool closeOnAction;
 
+  /// Show close button.
+  /// Defaults to true.
+  ///
+  final bool showCloseButton;
+
+  /// Enable keyboard listener.
+  /// Defaults to true.
+  ///
+  final bool enableKeyboardListener;
+
+  /// Allows to build a custom confirm button.
+  ///
+  final WidgetBuilder? confirmButtonBuilder;
+
   @override
   State<ConfirmPopup> createState() => _ConfirmPopupState();
 }
@@ -335,32 +341,47 @@ class _ConfirmPopupState extends State<ConfirmPopup> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = AppFlowyTheme.of(context);
     return KeyboardListener(
       focusNode: focusNode,
       autofocus: true,
       onKeyEvent: (event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.escape) {
-          Navigator.of(context).pop();
+        if (widget.enableKeyboardListener) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            Navigator.of(context).pop();
+          } else if (event is KeyUpEvent &&
+              event.logicalKey == LogicalKeyboardKey.enter) {
+            widget.onConfirm(context);
+            if (widget.closeOnAction) {
+              Navigator.of(context).pop();
+            }
+          }
         }
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: 20.0,
-          horizontal: 20.0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(theme.borderRadius.xl),
+          color: AppFlowyTheme.of(context).surfaceColorScheme.primary,
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: theme.spacing.xxl,
+          vertical: theme.spacing.xxl,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildTitle(),
-            const VSpace(6),
-            _buildDescription(),
+            if (widget.description.isNotEmpty) ...[
+              VSpace(theme.spacing.l),
+              _buildDescription(),
+            ],
             if (widget.child != null) ...[
               const VSpace(12),
               widget.child!,
             ],
-            const VSpace(20),
+            VSpace(theme.spacing.xxl),
             _buildStyledButton(context),
           ],
         ),
@@ -369,42 +390,62 @@ class _ConfirmPopupState extends State<ConfirmPopup> {
   }
 
   Widget _buildTitle() {
+    final theme = AppFlowyTheme.of(context);
     return Row(
       children: [
         Expanded(
-          child: FlowyText(
+          child: Text(
             widget.title,
-            fontSize: 14.0,
+            style: widget.titleStyle ??
+                theme.textStyle.heading4.prominent(
+                  color: ConfirmPopupColor.titleColor(context),
+                ),
             overflow: TextOverflow.ellipsis,
-            color: ConfirmPopupColor.titleColor(context),
           ),
         ),
         const HSpace(6.0),
-        FlowyButton(
-          useIntrinsicWidth: true,
-          text: const FlowySvg(FlowySvgs.upgrade_close_s),
-          onTap: () => Navigator.of(context).pop(),
-        ),
+        if (widget.showCloseButton) ...[
+          AFGhostButton.normal(
+            size: AFButtonSize.s,
+            padding: EdgeInsets.all(theme.spacing.xs),
+            onTap: () => Navigator.of(context).pop(),
+            builder: (context, isHovering, disabled) => FlowySvg(
+              FlowySvgs.password_close_m,
+              size: const Size.square(20),
+            ),
+          ),
+        ],
       ],
     );
   }
 
   Widget _buildDescription() {
-    return FlowyText.regular(
+    if (widget.description.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = AppFlowyTheme.of(context);
+
+    return Text(
       widget.description,
-      fontSize: 12.0,
-      color: ConfirmPopupColor.descriptionColor(context),
-      maxLines: 3,
-      lineHeight: 1.4,
+      style: widget.descriptionStyle ??
+          theme.textStyle.body.standard(
+            color: ConfirmPopupColor.descriptionColor(context),
+          ),
+      maxLines: 5,
     );
   }
 
   Widget _buildStyledButton(BuildContext context) {
     switch (widget.style) {
       case ConfirmPopupStyle.onlyOk:
+        if (widget.confirmButtonBuilder != null) {
+          return widget.confirmButtonBuilder!(context);
+        }
+
         return SpaceOkButton(
           onConfirm: () {
-            widget.onConfirm();
+            widget.onConfirm(context);
             if (widget.closeOnAction) {
               Navigator.of(context).pop();
             }
@@ -420,7 +461,7 @@ class _ConfirmPopupState extends State<ConfirmPopup> {
             Navigator.of(context).pop();
           },
           onConfirm: () {
-            widget.onConfirm();
+            widget.onConfirm(context);
             if (widget.closeOnAction) {
               Navigator.of(context).pop();
             }
@@ -429,6 +470,7 @@ class _ConfirmPopupState extends State<ConfirmPopup> {
               widget.confirmLabel ?? LocaleKeys.space_delete.tr(),
           confirmButtonColor:
               widget.confirmButtonColor ?? Theme.of(context).colorScheme.error,
+          confirmButtonBuilder: widget.confirmButtonBuilder,
         );
     }
   }
@@ -482,10 +524,12 @@ class CurrentSpace extends StatelessWidget {
     super.key,
     this.onTapBlankArea,
     required this.space,
+    this.isHovered = false,
   });
 
   final ViewPB space;
   final VoidCallback? onTapBlankArea;
+  final bool isHovered;
 
   @override
   Widget build(BuildContext context) {
@@ -493,16 +537,19 @@ class CurrentSpace extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SpaceIcon(
-          dimension: 20,
+          dimension: 22,
           space: space,
-          cornerRadius: 6.0,
+          svgSize: 12,
+          cornerRadius: 8.0,
         ),
         const HSpace(10),
         Flexible(
           child: FlowyText.medium(
             space.name,
             fontSize: 14.0,
+            figmaLineHeight: 18.0,
             overflow: TextOverflow.ellipsis,
+            color: isHovered ? Theme.of(context).colorScheme.onSurface : null,
           ),
         ),
         const HSpace(4.0),
@@ -510,6 +557,7 @@ class CurrentSpace extends StatelessWidget {
           context.read<SpaceBloc>().state.isExpanded
               ? FlowySvgs.workspace_drop_down_menu_show_s
               : FlowySvgs.workspace_drop_down_menu_hide_s,
+          color: isHovered ? Theme.of(context).colorScheme.onSurface : null,
         ),
       ],
     );
@@ -562,20 +610,19 @@ class SpacePages extends StatelessWidget {
   final ViewItemRightIconsBuilder? rightIconsBuilder;
   final ViewItemOnSelected onSelected;
   final ViewItemOnSelected? onTertiarySelected;
-  final bool Function(ViewPB view)? shouldIgnoreView;
+  final IgnoreViewType Function(ViewPB view)? shouldIgnoreView;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) =>
-          ViewBloc(view: space)..add(const ViewEvent.initial()),
+      create: (_) => ViewBloc(view: space)..add(const ViewEvent.initial()),
       child: BlocBuilder<ViewBloc, ViewState>(
         builder: (context, state) {
           // filter the child views that should be ignored
-          var childViews = state.view.childViews;
+          List<ViewPB> childViews = state.view.childViews;
           if (shouldIgnoreView != null) {
             childViews = childViews
-                .where((childView) => !shouldIgnoreView!(childView))
+                .where((v) => shouldIgnoreView!(v) != IgnoreViewType.hide)
                 .toList();
           }
           return Column(
@@ -594,6 +641,7 @@ class SpacePages extends StatelessWidget {
                     leftPadding: HomeSpaceViewSizes.leftPadding,
                     isFeedback: false,
                     isHovered: isHovered,
+                    enableRightClickContext: !disableSelectedStatus,
                     disableSelectedStatus: disableSelectedStatus,
                     isExpandedNotifier: isExpandedNotifier,
                     rightIconsBuilder: rightIconsBuilder,

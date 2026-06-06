@@ -1,15 +1,15 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
-import 'package:appflowy/mobile/presentation/base/gesture.dart';
+import 'package:appflowy/mobile/presentation/base/animated_gesture.dart';
 import 'package:appflowy/mobile/presentation/bottom_sheet/bottom_sheet.dart';
-import 'package:appflowy/mobile/presentation/home/mobile_home_setting_page.dart';
 import 'package:appflowy/mobile/presentation/home/workspaces/workspace_menu_bottom_sheet.dart';
 import 'package:appflowy/plugins/base/emoji/emoji_picker_screen.dart';
-import 'package:appflowy/plugins/base/icon/icon_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/util/built_in_svgs.dart';
 import 'package:appflowy/workspace/application/user/settings_user_bloc.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_icon.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -17,6 +17,8 @@ import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+
+import 'setting/settings_popup_menu.dart';
 
 class MobileHomePageHeader extends StatelessWidget {
   const MobileHomePageHeader({
@@ -45,14 +47,8 @@ class MobileHomePageHeader extends StatelessWidget {
                       ? _MobileWorkspace(userProfile: userProfile)
                       : _MobileUser(userProfile: userProfile),
                 ),
-                GestureDetector(
-                  onTap: () => context.push(
-                    MobileHomeSettingPage.routeName,
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(8.0),
-                    child: FlowySvg(FlowySvgs.m_notification_settings_s),
-                  ),
+                HomePageSettingsPopupMenu(
+                  userProfile: userProfile,
                 ),
                 const HSpace(8.0),
               ],
@@ -116,38 +112,41 @@ class _MobileWorkspace extends StatelessWidget {
           return const SizedBox.shrink();
         }
         return AnimatedGestureDetector(
+          scaleFactor: 0.99,
           alignment: Alignment.centerLeft,
           onTapUp: () {
             context.read<UserWorkspaceBloc>().add(
-                  const UserWorkspaceEvent.fetchWorkspaces(),
+                  UserWorkspaceEvent.fetchWorkspaces(),
                 );
             _showSwitchWorkspacesBottomSheet(context);
           },
           child: Row(
             children: [
-              SizedBox.square(
-                dimension: currentWorkspace.icon.isNotEmpty ? 34.0 : 26.0,
-                child: WorkspaceIcon(
-                  workspace: currentWorkspace,
-                  iconSize: 26,
-                  fontSize: 16.0,
-                  enableEdit: false,
-                  alignment: Alignment.centerLeft,
-                  onSelected: (result) => context.read<UserWorkspaceBloc>().add(
-                        UserWorkspaceEvent.updateWorkspaceIcon(
-                          currentWorkspace.workspaceId,
-                          result.emoji,
-                        ),
+              WorkspaceIcon(
+                workspaceIcon: currentWorkspace.icon,
+                workspaceName: currentWorkspace.name,
+                iconSize: 36,
+                fontSize: 18.0,
+                isEditable: true,
+                figmaLineHeight: 26.0,
+                emojiSize: 24.0,
+                borderRadius: 12.0,
+                onSelected: (result) => context.read<UserWorkspaceBloc>().add(
+                      UserWorkspaceEvent.updateWorkspaceIcon(
+                        workspaceId: currentWorkspace.workspaceId,
+                        icon: result.emoji,
                       ),
-                ),
+                    ),
               ),
               currentWorkspace.icon.isNotEmpty
                   ? const HSpace(2)
                   : const HSpace(8),
-              FlowyText.semibold(
-                currentWorkspace.name,
-                fontSize: 20.0,
-                overflow: TextOverflow.ellipsis,
+              Flexible(
+                child: FlowyText.semibold(
+                  currentWorkspace.name,
+                  fontSize: 20.0,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -166,6 +165,8 @@ class _MobileWorkspace extends StatelessWidget {
       showDragHandle: true,
       showCloseButton: true,
       useRootNavigator: true,
+      enableScrollable: true,
+      bottomSheetPadding: context.bottomSheetPadding(),
       title: LocaleKeys.workspace_menuTitle.tr(),
       backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (sheetContext) {
@@ -191,7 +192,8 @@ class _MobileWorkspace extends StatelessWidget {
 
                   context.read<UserWorkspaceBloc>().add(
                         UserWorkspaceEvent.openWorkspace(
-                          workspace.workspaceId,
+                          workspaceId: workspace.workspaceId,
+                          workspaceType: workspace.workspaceType,
                         ),
                       );
                 },
@@ -227,12 +229,13 @@ class _UserIcon extends StatelessWidget {
               fontSize: 26,
             ),
       onTap: () async {
-        final icon = await context.push<EmojiPickerResult>(
+        final icon = await context.push<EmojiIconData>(
           Uri(
             path: MobileEmojiPickerScreen.routeName,
             queryParameters: {
               MobileEmojiPickerScreen.pageTitle:
                   LocaleKeys.titleBar_userIcon.tr(),
+              MobileEmojiPickerScreen.selectTabs: [PickerTabType.emoji.name],
             },
           ).toString(),
         );

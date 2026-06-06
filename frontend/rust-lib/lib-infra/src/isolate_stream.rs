@@ -1,11 +1,13 @@
 use allo_isolate::{IntoDart, Isolate};
 use anyhow::anyhow;
 use futures::Sink;
+pub use futures_util::sink::SinkExt;
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 #[pin_project]
+#[derive(Clone, Debug)]
 pub struct IsolateSink {
   isolate: Isolate,
 }

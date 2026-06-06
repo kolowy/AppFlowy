@@ -8,13 +8,14 @@ fi
 
 NEW_REV="$1"
 echo "New revision: $NEW_REV"
-directories=("rust-lib" "appflowy_tauri/src-tauri" "appflowy_web_app/src-tauri")
+directories=("rust-lib")
 
 for dir in "${directories[@]}"; do
     echo "Updating $dir"
     pushd "$dir" > /dev/null
 
     sed -i.bak "/^client-api[[:alnum:]-]*[[:space:]]*=/s/rev = \"[a-fA-F0-9]\{6,40\}\"/rev = \"$NEW_REV\"/g" Cargo.toml
+    sed -i.bak '/^workspace-template *=/ s/rev = "[a-fA-F0-9]\{6,40\}"/rev = "'"$NEW_REV"'"/' Cargo.toml
 
     # Detect changed crates
     client_api_crates=($(grep -E '^client-api[a-zA-Z0-9_-]* =' Cargo.toml | awk -F'=' '{print $1}' | tr -d ' '))

@@ -1,10 +1,10 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/mobile/application/mobile_router.dart';
 import 'package:appflowy/mobile/presentation/home/shared/empty_placeholder.dart';
 import 'package:appflowy/mobile/presentation/home/shared/mobile_page_card.dart';
 import 'package:appflowy/util/theme_extension.dart';
 import 'package:appflowy/workspace/application/favorite/favorite_bloc.dart';
 import 'package:appflowy/workspace/application/menu/sidebar_sections_bloc.dart';
-import 'package:appflowy/workspace/application/user/prelude.dart';
 import 'package:appflowy/workspace/presentation/home/home_sizes.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
@@ -96,36 +96,34 @@ class _FavoriteViews extends StatelessWidget {
     final borderColor = Theme.of(context).isLightMode
         ? const Color(0xFFE9E9EC)
         : const Color(0x1AFFFFFF);
-    return Scrollbar(
-      child: ListView.separated(
-        key: const PageStorageKey('favorite_views_page_storage_key'),
-        padding: EdgeInsets.only(
-          bottom: HomeSpaceViewSizes.mVerticalPadding +
-              MediaQuery.of(context).padding.bottom,
-        ),
-        itemBuilder: (context, index) {
-          final view = favoriteViews[index];
-          return Container(
-            padding: const EdgeInsets.symmetric(vertical: 24.0),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: borderColor,
-                  width: 0.5,
-                ),
+    return ListView.separated(
+      key: const PageStorageKey('favorite_views_page_storage_key'),
+      padding: EdgeInsets.only(
+        bottom: HomeSpaceViewSizes.mVerticalPadding +
+            MediaQuery.of(context).padding.bottom,
+      ),
+      itemBuilder: (context, index) {
+        final view = favoriteViews[index];
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24.0),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: borderColor,
+                width: 0.5,
               ),
             ),
-            child: MobileViewPage(
-              key: ValueKey(view.item.id),
-              view: view.item,
-              timestamp: view.timestamp,
-              type: MobilePageCardType.favorite,
-            ),
-          );
-        },
-        separatorBuilder: (context, index) => const HSpace(8),
-        itemCount: favoriteViews.length,
-      ),
+          ),
+          child: MobileViewPage(
+            key: ValueKey(view.item.id),
+            view: view.item,
+            timestamp: view.timestamp,
+            type: MobilePageCardType.favorite,
+          ),
+        );
+      },
+      separatorBuilder: (context, index) => const HSpace(8),
+      itemCount: favoriteViews.length,
     );
   }
 }

@@ -1,21 +1,27 @@
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/core/helpers/url_launcher.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/mobile/presentation/bottom_sheet/show_mobile_bottom_sheet.dart';
+import 'package:appflowy/mobile/presentation/widgets/flowy_option_tile.dart';
 import 'package:appflowy/plugins/document/application/document_bloc.dart';
 import 'package:appflowy/plugins/document/presentation/editor_drop_manager.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/actions/mobile_block_action_buttons.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/copy_and_paste/clipboard_service.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/file/file_util.dart';
+import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/presentation/home/toast.dart';
+import 'package:appflowy_backend/protobuf/flowy-database2/file_entities.pbenum.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flowy_infra_ui/style_widget/hover.dart';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:string_validator/string_validator.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 import 'file_block_menu.dart';
 import 'file_upload_menu.dart';
@@ -55,6 +61,11 @@ class FileBlockKeys {
   /// The value is a String, in form of user id.
   ///
   static const String uploadedBy = 'uploaded_by';
+
+  /// The GlobalKey of the FileBlockComponentState.
+  ///
+  /// **Note: This value is used in extraInfos of the Node, not in the attributes.**
+  static const String globalKey = 'global_key';
 }
 
 enum FileUrlType {
@@ -85,6 +96,17 @@ enum FileUrlType {
         return 2;
     }
   }
+
+  FileUploadTypePB toFileUploadTypePB() {
+    switch (this) {
+      case FileUrlType.local:
+        return FileUploadTypePB.LocalFile;
+      case FileUrlType.network:
+        return FileUploadTypePB.NetworkFile;
+      case FileUrlType.cloud:
+        return FileUploadTypePB.CloudFile;
+    }
+  }
 }
 
 Node fileNode({
@@ -109,8 +131,11 @@ class FileBlockComponentBuilder extends BlockComponentBuilder {
   @override
   BlockComponentWidget build(BlockComponentContext blockComponentContext) {
     final node = blockComponentContext.node;
+    final extraInfos = node.extraInfos;
+    final key = extraInfos?[FileBlockKeys.globalKey] as GlobalKey?;
+
     return FileBlockComponent(
-      key: node.key,
+      key: key ?? node.key,
       node: node,
       showActions: showActions(node),
       configuration: configuration,
@@ -119,7 +144,7 @@ class FileBlockComponentBuilder extends BlockComponentBuilder {
   }
 
   @override
-  bool validate(Node node) => node.delta == null && node.children.isEmpty;
+  BlockComponentValidate get validate => (node) => node.children.isEmpty;
 }
 
 class FileBlockComponent extends BlockComponentStatefulWidget {
@@ -128,8 +153,11 @@ class FileBlockComponent extends BlockComponentStatefulWidget {
     required super.node,
     super.showActions,
     super.actionBuilder,
+    super.actionTrailingBuilder,
     super.configuration = const BlockComponentConfiguration(),
   });
+
+  static const uploadDragKey = 'FileUploadMenu';
 
   @override
   State<FileBlockComponent> createState() => FileBlockComponentState();
@@ -145,8 +173,9 @@ class FileBlockComponentState extends State<FileBlockComponent>
 
   RenderBox? get _renderBox => context.findRenderObject() as RenderBox?;
 
-  late EditorDropManagerState dropManagerState =
-      context.read<EditorDropManagerState>();
+  late EditorDropManagerState? dropManagerState = UniversalPlatform.isMobile
+      ? null
+      : context.read<EditorDropManagerState?>();
 
   final fileKey = GlobalKey();
   final showActionsNotifier = ValueNotifier<bool>(false);
@@ -161,13 +190,17 @@ class FileBlockComponentState extends State<FileBlockComponent>
 
   @override
   void didChangeDependencies() {
-    dropManagerState = context.read<EditorDropManagerState>();
+    if (!UniversalPlatform.isMobile) {
+      dropManagerState = context.read<EditorDropManagerState?>();
+    }
     super.didChangeDependencies();
   }
 
   @override
   Widget build(BuildContext context) {
     final url = node.attributes[FileBlockKeys.url];
+    final FileUrlType urlType =
+        FileUrlType.fromIntValue(node.attributes[FileBlockKeys.urlType] ?? 0);
 
     Widget child = MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -185,11 +218,8 @@ class FileBlockComponentState extends State<FileBlockComponent>
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: url != null && url.isNotEmpty
-            ? () => afLaunchUrlString(url)
-            : () {
-                controller.show();
-                dropManagerState.add(FileBlockKeys.type);
-              },
+            ? () async => _openFile(context, urlType, url)
+            : _openMenu,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: isHovering
@@ -208,7 +238,11 @@ class FileBlockComponentState extends State<FileBlockComponent>
             child: Row(
               children: [
                 const HSpace(10),
-                const Icon(Icons.upload_file_outlined),
+                FlowySvg(
+                  FlowySvgs.slash_menu_icon_file_s,
+                  color: Theme.of(context).hintColor,
+                  size: const Size.square(24),
+                ),
                 const HSpace(10),
                 ..._buildTrailing(context),
               ],
@@ -218,23 +252,26 @@ class FileBlockComponentState extends State<FileBlockComponent>
       ),
     );
 
-    if (PlatformExtension.isDesktopOrWeb) {
+    if (UniversalPlatform.isDesktopOrWeb) {
       if (url == null || url.isEmpty) {
         child = DropTarget(
+          enable: dropManagerState?.isDropEnabled == true ||
+              dropManagerState?.contains(FileBlockKeys.type) == true,
           onDragEntered: (_) {
-            if (dropManagerState.isDropEnabled) {
+            if (dropManagerState?.isDropEnabled == true) {
+              dropManagerState?.add(FileBlockKeys.type);
               setState(() => isDragging = true);
             }
           },
           onDragExited: (_) {
-            if (dropManagerState.isDropEnabled) {
+            if (dropManagerState?.contains(FileBlockKeys.type) == true) {
+              dropManagerState?.remove(FileBlockKeys.type);
               setState(() => isDragging = false);
             }
           },
           onDragDone: (details) {
-            if (dropManagerState.isDropEnabled) {
-              insertFileFromLocal(details.files.first.path);
-            }
+            dropManagerState?.remove(FileBlockKeys.type);
+            insertFileFromLocal(details.files);
           },
           child: AppFlowyPopover(
             controller: controller,
@@ -245,8 +282,12 @@ class FileBlockComponentState extends State<FileBlockComponent>
               minHeight: 80,
             ),
             clickHandler: PopoverClickHandler.gestureDetector,
-            onOpen: () => dropManagerState.add(FileBlockKeys.type),
-            onClose: () => dropManagerState.remove(FileBlockKeys.type),
+            onOpen: () => dropManagerState?.add(
+              FileBlockComponent.uploadDragKey,
+            ),
+            onClose: () => dropManagerState?.remove(
+              FileBlockComponent.uploadDragKey,
+            ),
             popupBuilder: (_) => FileUploadMenu(
               onInsertLocalFile: insertFileFromLocal,
               onInsertNetworkFile: insertNetworkFile,
@@ -262,31 +303,62 @@ class FileBlockComponentState extends State<FileBlockComponent>
         listenable: editorState.selectionNotifier,
         blockColor: editorState.editorStyle.selectionColor,
         supportTypes: const [BlockSelectionType.block],
-        child: Padding(key: fileKey, padding: padding, child: child),
+        child: Padding(
+          key: fileKey,
+          padding: padding,
+          child: child,
+        ),
       );
     } else {
-      child = Padding(key: fileKey, padding: padding, child: child);
+      return Padding(
+        key: fileKey,
+        padding: padding,
+        child: MobileBlockActionButtons(
+          node: widget.node,
+          editorState: editorState,
+          child: child,
+        ),
+      );
     }
 
     if (widget.showActions && widget.actionBuilder != null) {
       child = BlockComponentActionWrapper(
         node: node,
         actionBuilder: widget.actionBuilder!,
+        actionTrailingBuilder: widget.actionTrailingBuilder,
         child: child,
       );
     }
 
-    if (!PlatformExtension.isDesktopOrWeb) {
+    if (!UniversalPlatform.isDesktopOrWeb) {
       // show a fixed menu on mobile
       child = MobileBlockActionButtons(
-        showThreeDots: false,
         node: node,
         editorState: editorState,
+        extendActionWidgets: _buildExtendActionWidgets(context),
         child: child,
       );
     }
 
     return child;
+  }
+
+  Future<void> _openFile(
+    BuildContext context,
+    FileUrlType urlType,
+    String url,
+  ) async {
+    await afLaunchUrlString(url, context: context);
+  }
+
+  void _openMenu() {
+    if (UniversalPlatform.isDesktopOrWeb) {
+      controller.show();
+      dropManagerState?.add(FileBlockComponent.uploadDragKey);
+    } else {
+      editorState.updateSelectionWithReason(null, extraInfo: {});
+      showUploadFileMobileMenu();
+    }
   }
 
   List<Widget> _buildTrailing(BuildContext context) {
@@ -300,7 +372,7 @@ class FileBlockComponentState extends State<FileBlockComponent>
           ),
         ),
         const HSpace(8),
-        if (PlatformExtension.isDesktopOrWeb) ...[
+        if (UniversalPlatform.isDesktopOrWeb) ...[
           ValueListenableBuilder<bool>(
             valueListenable: showActionsNotifier,
             builder: (_, value, __) {
@@ -339,6 +411,9 @@ class FileBlockComponentState extends State<FileBlockComponent>
           ),
           const HSpace(8),
         ],
+        if (UniversalPlatform.isMobile) ...[
+          const HSpace(36),
+        ],
       ];
     } else {
       return [
@@ -348,13 +423,81 @@ class FileBlockComponentState extends State<FileBlockComponent>
                 ? LocaleKeys.document_plugins_file_placeholderDragging.tr()
                 : LocaleKeys.document_plugins_file_placeholderText.tr(),
             overflow: TextOverflow.ellipsis,
+            color: Theme.of(context).hintColor,
           ),
         ),
       ];
     }
   }
 
-  Future<void> insertFileFromLocal(String path) async {
+  // only used on mobile platform
+  List<Widget> _buildExtendActionWidgets(BuildContext context) {
+    final String? url = widget.node.attributes[FileBlockKeys.url];
+    if (url == null || url.isEmpty) {
+      return [];
+    }
+
+    final urlType = FileUrlType.fromIntValue(
+      widget.node.attributes[FileBlockKeys.urlType] ?? 0,
+    );
+
+    if (urlType != FileUrlType.network) {
+      return [];
+    }
+
+    return [
+      FlowyOptionTile.text(
+        showTopBorder: false,
+        text: LocaleKeys.editor_copyLink.tr(),
+        leftIcon: const FlowySvg(
+          FlowySvgs.m_field_copy_s,
+        ),
+        onTap: () async {
+          context.pop();
+          showSnackBarMessage(
+            context,
+            LocaleKeys.document_plugins_image_copiedToPasteBoard.tr(),
+          );
+          await getIt<ClipboardService>().setPlainText(url);
+        },
+      ),
+    ];
+  }
+
+  void showUploadFileMobileMenu() {
+    showMobileBottomSheet(
+      context,
+      title: LocaleKeys.document_plugins_file_name.tr(),
+      showHeader: true,
+      showCloseButton: true,
+      showDragHandle: true,
+      builder: (context) {
+        return Container(
+          margin: const EdgeInsets.only(top: 12.0),
+          constraints: const BoxConstraints(
+            maxHeight: 340,
+            minHeight: 80,
+          ),
+          child: FileUploadMenu(
+            onInsertLocalFile: (file) async {
+              context.pop();
+              await insertFileFromLocal(file);
+            },
+            onInsertNetworkFile: (url) async {
+              context.pop();
+              await insertNetworkFile(url);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> insertFileFromLocal(List<XFile> files) async {
+    if (files.isEmpty) return;
+
+    final file = files.first;
+    final path = file.path;
     final documentBloc = context.read<DocumentBloc>();
     final isLocalMode = documentBloc.isLocalMode;
     final urlType = isLocalMode ? FileUrlType.local : FileUrlType.cloud;
@@ -375,14 +518,13 @@ class FileBlockComponentState extends State<FileBlockComponent>
     }
 
     // Remove the file block from the drop state manager
-    dropManagerState.remove(FileBlockKeys.type);
+    dropManagerState?.remove(FileBlockKeys.type);
 
-    final name = Uri.tryParse(path)?.pathSegments.last ?? url;
     final transaction = editorState.transaction;
     transaction.updateNode(widget.node, {
       FileBlockKeys.url: url,
       FileBlockKeys.urlType: urlType.toIntValue(),
-      FileBlockKeys.name: name,
+      FileBlockKeys.name: file.name,
       FileBlockKeys.uploadedAt: DateTime.now().millisecondsSinceEpoch,
     });
     await editorState.apply(transaction);
@@ -398,9 +540,20 @@ class FileBlockComponentState extends State<FileBlockComponent>
     }
 
     // Remove the file block from the drop state manager
-    dropManagerState.remove(FileBlockKeys.type);
+    dropManagerState?.remove(FileBlockKeys.type);
 
-    final name = Uri.tryParse(url)?.pathSegments.last ?? url;
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return;
+    }
+
+    String name = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : "";
+    if (name.isEmpty && uri.pathSegments.length > 1) {
+      name = uri.pathSegments[uri.pathSegments.length - 2];
+    } else if (name.isEmpty) {
+      name = uri.host;
+    }
+
     final transaction = editorState.transaction;
     transaction.updateNode(widget.node, {
       FileBlockKeys.url: url,
@@ -430,7 +583,7 @@ class FileBlockComponentState extends State<FileBlockComponent>
   Rect getBlockRect({bool shiftWithBaseOffset = false}) {
     final renderBox = fileKey.currentContext?.findRenderObject();
     if (renderBox is RenderBox) {
-      return Offset.zero & renderBox.size;
+      return padding.topLeft & renderBox.size;
     }
     return Rect.zero;
   }

@@ -1,7 +1,9 @@
-pub mod local_llm_chat;
-pub mod local_llm_resource;
-mod model_request;
+pub mod controller;
+mod request;
+pub mod resource;
 
-mod path;
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-pub mod watch;
+pub mod chat;
+pub mod completion;
+pub mod database;
+pub mod prompt;
+pub mod stream_util;

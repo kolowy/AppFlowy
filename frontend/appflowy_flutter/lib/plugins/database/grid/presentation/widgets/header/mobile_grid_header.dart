@@ -1,3 +1,4 @@
+import 'package:appflowy/features/page_access_level/logic/page_access_level_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/presentation/database/field/mobile_field_bottom_sheets.dart';
@@ -39,6 +40,8 @@ class _MobileGridHeaderState extends State<MobileGridHeader> {
   Widget build(BuildContext context) {
     final fieldController =
         context.read<GridBloc>().databaseController.fieldController;
+    final isEditable =
+        context.read<PageAccessLevelBloc?>()?.state.isEditable ?? false;
     return BlocProvider(
       create: (context) {
         return GridHeaderBloc(
@@ -76,12 +79,15 @@ class _MobileGridHeaderState extends State<MobileGridHeader> {
               );
             },
           ),
-          SizedBox(
-            height: _kGridHeaderHeight,
-            child: _GridHeader(
-              viewId: widget.viewId,
-              fieldController: fieldController,
-              scrollController: widget.reorderableController,
+          IgnorePointer(
+            ignoring: !isEditable,
+            child: SizedBox(
+              height: _kGridHeaderHeight,
+              child: _GridHeader(
+                viewId: widget.viewId,
+                fieldController: fieldController,
+                scrollController: widget.reorderableController,
+              ),
             ),
           ),
         ],
@@ -178,7 +184,7 @@ class _GridHeaderState extends State<_GridHeader> {
   }
 }
 
-class CreateFieldButton extends StatefulWidget {
+class CreateFieldButton extends StatelessWidget {
   const CreateFieldButton({
     super.key,
     required this.viewId,
@@ -189,15 +195,10 @@ class CreateFieldButton extends StatefulWidget {
   final void Function(String fieldId) onFieldCreated;
 
   @override
-  State<CreateFieldButton> createState() => _CreateFieldButtonState();
-}
-
-class _CreateFieldButtonState extends State<CreateFieldButton> {
-  @override
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(
-        maxWidth: GridSize.newPropertyButtonWidth,
+        maxWidth: GridSize.mobileNewPropertyButtonWidth,
         minHeight: GridSize.headerHeight,
       ),
       decoration: _getDecoration(context),
@@ -211,7 +212,7 @@ class _CreateFieldButtonState extends State<CreateFieldButton> {
           color: Theme.of(context).hintColor,
         ),
         hoverColor: AFThemeExtension.of(context).greyHover,
-        onTap: () => mobileCreateFieldWorkflow(context, widget.viewId),
+        onTap: () => mobileCreateFieldWorkflow(context, viewId),
         leftIconSize: const Size.square(18),
         leftIcon: FlowySvg(
           FlowySvgs.add_s,

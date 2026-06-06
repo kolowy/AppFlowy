@@ -1,11 +1,12 @@
 import 'package:appflowy/generated/locale_keys.g.dart';
-import 'package:appflowy/plugins/base/icon/icon_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_actions.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_icon.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_menu.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/sidebar_workspace.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialog_v2.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'util.dart';
@@ -31,22 +32,24 @@ extension AppFlowyWorkspace on WidgetTester {
   }
 
   Future<void> changeWorkspaceName(String name) async {
-    final moreButton = find.descendant(
-      of: find.byType(WorkspaceMenuItem),
-      matching: find.byType(WorkspaceMoreActionList),
-    );
-    expect(moreButton, findsOneWidget);
+    final menuItem = find.byType(WorkspaceMenuItem);
+    expect(menuItem, findsOneWidget);
     await hoverOnWidget(
-      moreButton,
+      menuItem,
       onHover: () async {
-        await tapButton(moreButton);
         await tapButton(
-          find.findTextInFlowyText(LocaleKeys.button_rename.tr()),
+          find.descendant(
+            of: menuItem,
+            matching: find.byType(WorkspaceMoreActionList),
+          ),
         );
-        final input = find.byType(TextFormField);
-        expect(input, findsOneWidget);
+        await tapButton(find.text(LocaleKeys.button_rename.tr()));
+        final input = find.descendant(
+          of: find.byType(AFTextFieldDialog),
+          matching: find.byType(AFTextField),
+        );
         await enterText(input, name);
-        await tapButton(find.text(LocaleKeys.button_ok.tr()));
+        await tapButton(find.text(LocaleKeys.button_confirm.tr()));
       },
     );
   }
@@ -58,7 +61,7 @@ extension AppFlowyWorkspace on WidgetTester {
     );
     expect(iconButton, findsOneWidget);
     await tapButton(iconButton);
-    final iconPicker = find.byType(FlowyIconPicker);
+    final iconPicker = find.byType(FlowyIconEmojiPicker);
     expect(iconPicker, findsOneWidget);
     await tapButton(find.findTextInFlowyText(icon));
   }

@@ -1,32 +1,32 @@
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use anyhow::Error;
+use collab::entity::EncodedCollab;
 use collab::preclude::CollabPlugin;
 use collab_document::blocks::DocumentData;
+use collab_document::document::Document;
 use collab_document::document_data::default_document_data;
-use nanoid::nanoid;
-use parking_lot::Once;
-use tempfile::TempDir;
-use tracing_subscriber::{fmt::Subscriber, util::SubscriberInitExt, EnvFilter};
-
+use collab_integrate::CollabKVDB;
 use collab_integrate::collab_builder::{
   AppFlowyCollabBuilder, CollabCloudPluginProvider, CollabPluginProviderContext,
   CollabPluginProviderType, WorkspaceCollabIntegrate,
 };
-use collab_integrate::CollabKVDB;
-use flowy_document::document::MutexDocument;
 use flowy_document::entities::{DocumentSnapshotData, DocumentSnapshotMeta};
 use flowy_document::manager::{DocumentManager, DocumentSnapshotService, DocumentUserService};
 use flowy_document_pub::cloud::*;
 use flowy_error::{ErrorCode, FlowyError, FlowyResult};
-use flowy_storage_pub::chunked_byte::ChunkedBytes;
-use flowy_storage_pub::storage::{CreatedUpload, StorageService};
+use flowy_storage_pub::storage::{CreatedUpload, FileProgressReceiver, StorageService};
 use lib_infra::async_trait::async_trait;
 use lib_infra::box_any::BoxAny;
-use lib_infra::future::FutureResult;
+use nanoid::nanoid;
+use tempfile::TempDir;
+use tokio::sync::RwLock;
+use tracing_subscriber::{EnvFilter, fmt::Subscriber, util::SubscriberInitExt};
+use uuid::Uuid;
 
 pub struct DocumentTest {
+  #[allow(dead_code)]
+  builder: Arc<AppFlowyCollabBuilder>,
   inner: DocumentManager,
 }
 
@@ -40,18 +40,22 @@ impl DocumentTest {
     let builder = Arc::new(AppFlowyCollabBuilder::new(
       DefaultCollabStorageProvider(),
       WorkspaceCollabIntegrateImpl {
-        workspace_id: user.workspace_id.clone(),
+        workspace_id: user.workspace_id,
       },
+      None,
     ));
 
     let manager = DocumentManager::new(
       Arc::new(user),
-      builder,
+      Arc::downgrade(&builder),
       cloud_service,
       Arc::downgrade(&file_storage),
       document_snapshot,
     );
-    Self { inner: manager }
+    Self {
+      inner: manager,
+      builder,
+    }
   }
 }
 
@@ -64,7 +68,7 @@ impl Deref for DocumentTest {
 }
 
 pub struct FakeUser {
-  workspace_id: String,
+  workspace_id: Uuid,
   collab_db: Arc<CollabKVDB>,
 }
 
@@ -75,7 +79,7 @@ impl FakeUser {
     let tempdir = TempDir::new().unwrap();
     let path = tempdir.into_path();
     let collab_db = Arc::new(CollabKVDB::open(path).unwrap());
-    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let workspace_id = uuid::Uuid::new_v4();
 
     Self {
       collab_db,
@@ -89,8 +93,8 @@ impl DocumentUserService for FakeUser {
     Ok(1)
   }
 
-  fn workspace_id(&self) -> Result<String, FlowyError> {
-    Ok(self.workspace_id.clone())
+  fn workspace_id(&self) -> Result<Uuid, FlowyError> {
+    Ok(self.workspace_id)
   }
 
   fn collab_db(&self, _uid: i64) -> Result<std::sync::Weak<CollabKVDB>, FlowyError> {
@@ -103,9 +107,11 @@ impl DocumentUserService for FakeUser {
 }
 
 pub fn setup_log() {
-  static START: Once = Once::new();
-  START.call_once(|| {
-    std::env::set_var("RUST_LOG", "collab_persistence=trace");
+  static START: OnceLock<()> = OnceLock::new();
+  START.get_or_init(|| {
+    unsafe {
+      std::env::set_var("RUST_LOG", "collab_persistence=trace");
+    }
     let subscriber = Subscriber::builder()
       .with_env_filter(EnvFilter::from_default_env())
       .with_ansi(true)
@@ -114,10 +120,10 @@ pub fn setup_log() {
   });
 }
 
-pub async fn create_and_open_empty_document() -> (DocumentTest, Arc<MutexDocument>, String) {
+pub async fn create_and_open_empty_document() -> (DocumentTest, Arc<RwLock<Document>>, String) {
   let test = DocumentTest::new();
-  let doc_id: String = gen_document_id();
-  let data = default_document_data(&doc_id);
+  let doc_id = gen_document_id();
+  let data = default_document_data(&doc_id.to_string());
   let uid = test.user_service.user_id().unwrap();
   // create a document
   test
@@ -126,14 +132,13 @@ pub async fn create_and_open_empty_document() -> (DocumentTest, Arc<MutexDocumen
     .unwrap();
 
   test.open_document(&doc_id).await.unwrap();
-  let document = test.get_document(&doc_id).await.unwrap();
+  let document = test.editable_document(&doc_id).await.unwrap();
 
   (test, document, data.page_id)
 }
 
-pub fn gen_document_id() -> String {
-  let uuid = uuid::Uuid::new_v4();
-  uuid.to_string()
+pub fn gen_document_id() -> Uuid {
+  uuid::Uuid::new_v4()
 }
 
 pub fn gen_id() -> String {
@@ -141,36 +146,45 @@ pub fn gen_id() -> String {
 }
 
 pub struct LocalTestDocumentCloudServiceImpl();
+
+#[async_trait]
 impl DocumentCloudService for LocalTestDocumentCloudServiceImpl {
-  fn get_document_doc_state(
+  async fn get_document_doc_state(
     &self,
-    document_id: &str,
-    _workspace_id: &str,
-  ) -> FutureResult<Vec<u8>, FlowyError> {
+    document_id: &Uuid,
+    _workspace_id: &Uuid,
+  ) -> Result<Vec<u8>, FlowyError> {
     let document_id = document_id.to_string();
-    FutureResult::new(async move {
-      Err(FlowyError::new(
-        ErrorCode::RecordNotFound,
-        format!("Document {} not found", document_id),
-      ))
-    })
+    Err(FlowyError::new(
+      ErrorCode::RecordNotFound,
+      format!("Document {} not found", document_id),
+    ))
   }
 
-  fn get_document_snapshots(
+  async fn get_document_snapshots(
     &self,
-    _document_id: &str,
+    _document_id: &Uuid,
     _limit: usize,
     _workspace_id: &str,
-  ) -> FutureResult<Vec<DocumentSnapshot>, Error> {
-    FutureResult::new(async move { Ok(vec![]) })
+  ) -> Result<Vec<DocumentSnapshot>, FlowyError> {
+    Ok(vec![])
   }
 
-  fn get_document_data(
+  async fn get_document_data(
     &self,
-    _document_id: &str,
-    _workspace_id: &str,
-  ) -> FutureResult<Option<DocumentData>, Error> {
-    FutureResult::new(async move { Ok(None) })
+    _document_id: &Uuid,
+    _workspace_id: &Uuid,
+  ) -> Result<Option<DocumentData>, FlowyError> {
+    Ok(None)
+  }
+
+  async fn create_document_collab(
+    &self,
+    _workspace_id: &Uuid,
+    _document_id: &Uuid,
+    _encoded_collab: EncodedCollab,
+  ) -> Result<(), FlowyError> {
+    Ok(())
   }
 }
 
@@ -178,15 +192,7 @@ pub struct DocumentTestFileStorageService;
 
 #[async_trait]
 impl StorageService for DocumentTestFileStorageService {
-  fn upload_object(
-    &self,
-    _workspace_id: &str,
-    _local_file_path: &str,
-  ) -> FutureResult<String, FlowyError> {
-    todo!()
-  }
-
-  fn delete_object(&self, _url: String, _local_file_path: String) -> FlowyResult<()> {
+  async fn delete_object(&self, _url: String) -> FlowyResult<()> {
     todo!()
   }
 
@@ -194,16 +200,16 @@ impl StorageService for DocumentTestFileStorageService {
     todo!()
   }
 
-  fn create_upload(
+  async fn create_upload(
     &self,
     _workspace_id: &str,
     _parent_dir: &str,
     _local_file_path: &str,
-  ) -> FutureResult<CreatedUpload, flowy_error::FlowyError> {
+  ) -> Result<(CreatedUpload, Option<FileProgressReceiver>), flowy_error::FlowyError> {
     todo!()
   }
 
-  async fn start_upload(&self, _chunks: &ChunkedBytes, _record: &BoxAny) -> Result<(), FlowyError> {
+  async fn start_upload(&self, _record: &BoxAny) -> Result<(), FlowyError> {
     todo!()
   }
 
@@ -213,6 +219,14 @@ impl StorageService for DocumentTestFileStorageService {
     _parent_dir: &str,
     _file_id: &str,
   ) -> Result<(), FlowyError> {
+    todo!()
+  }
+
+  async fn subscribe_file_progress(
+    &self,
+    _parent_idr: &str,
+    _url: &str,
+  ) -> Result<Option<FileProgressReceiver>, FlowyError> {
     todo!()
   }
 }
@@ -249,14 +263,14 @@ impl DocumentSnapshotService for DocumentTestSnapshot {
 }
 
 struct WorkspaceCollabIntegrateImpl {
-  workspace_id: String,
+  workspace_id: Uuid,
 }
 impl WorkspaceCollabIntegrate for WorkspaceCollabIntegrateImpl {
-  fn workspace_id(&self) -> Result<String, Error> {
-    Ok(self.workspace_id.clone())
+  fn workspace_id(&self) -> Result<Uuid, FlowyError> {
+    Ok(self.workspace_id)
   }
 
-  fn device_id(&self) -> Result<String, Error> {
+  fn device_id(&self) -> Result<String, FlowyError> {
     Ok("fake_device_id".to_string())
   }
 }

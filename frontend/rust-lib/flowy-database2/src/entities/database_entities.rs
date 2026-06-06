@@ -6,6 +6,7 @@ use flowy_derive::{ProtoBuf, ProtoBuf_Enum};
 use flowy_error::{ErrorCode, FlowyError};
 
 use lib_infra::validator_fn::required_not_empty_str;
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::entities::parser::NotEmptyStr;
@@ -26,9 +27,6 @@ pub struct DatabasePB {
 
   #[pb(index = 4)]
   pub layout_type: DatabaseLayoutPB,
-
-  #[pb(index = 5)]
-  pub is_linked: bool,
 }
 
 #[derive(ProtoBuf, Default)]
@@ -77,7 +75,7 @@ pub struct RepeatedDatabaseIdPB {
 #[derive(Clone, ProtoBuf, Default, Debug, Validate)]
 pub struct DatabaseViewIdPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub value: String,
 }
 
@@ -155,6 +153,7 @@ impl TryInto<MoveRowParams> for MoveRowPayloadPB {
     })
   }
 }
+
 #[derive(Debug, Clone, Default, ProtoBuf)]
 pub struct MoveGroupRowPayloadPB {
   #[pb(index = 1)]
@@ -207,7 +206,7 @@ pub struct DatabaseMetaPB {
   pub database_id: String,
 
   #[pb(index = 2)]
-  pub inline_view_id: String,
+  pub view_id: String,
 }
 
 #[derive(Debug, Default, ProtoBuf)]
@@ -322,4 +321,74 @@ pub struct DatabaseSnapshotPB {
 
   #[pb(index = 4)]
   pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Default, ProtoBuf)]
+pub struct RemoveCoverPayloadPB {
+  #[pb(index = 1)]
+  pub view_id: String,
+
+  #[pb(index = 2)]
+  pub row_id: String,
+}
+
+pub struct RemoveCoverParams {
+  pub view_id: String,
+  pub row_id: RowId,
+}
+
+impl TryInto<RemoveCoverParams> for RemoveCoverPayloadPB {
+  type Error = ErrorCode;
+
+  fn try_into(self) -> Result<RemoveCoverParams, Self::Error> {
+    let view_id = NotEmptyStr::parse(self.view_id).map_err(|_| ErrorCode::DatabaseViewIdIsEmpty)?;
+    let row_id = NotEmptyStr::parse(self.row_id).map_err(|_| ErrorCode::RowIdIsEmpty)?;
+
+    Ok(RemoveCoverParams {
+      view_id: view_id.0,
+      row_id: RowId::from(row_id.0),
+    })
+  }
+}
+
+#[derive(Default, ProtoBuf, Clone, Debug)]
+pub struct RepeatedCustomPromptPB {
+  #[pb(index = 1)]
+  pub items: Vec<CustomPromptPB>,
+}
+
+#[derive(Default, ProtoBuf, Clone, Debug)]
+pub struct CustomPromptPB {
+  #[pb(index = 1)]
+  pub id: String,
+
+  #[pb(index = 2)]
+  pub name: String,
+
+  #[pb(index = 3)]
+  pub content: String,
+
+  #[pb(index = 4)]
+  pub example: String,
+
+  #[pb(index = 5)]
+  pub category: String,
+}
+
+#[derive(Default, ProtoBuf, Clone, Debug, Serialize, Deserialize, Validate)]
+pub struct CustomPromptDatabaseConfigPB {
+  #[pb(index = 1)]
+  pub view_id: String,
+
+  #[pb(index = 2)]
+  pub title_field_id: String,
+
+  #[pb(index = 3)]
+  pub content_field_id: String,
+
+  #[pb(index = 4, one_of)]
+  pub example_field_id: Option<String>,
+
+  #[pb(index = 5, one_of)]
+  pub category_field_id: Option<String>,
 }

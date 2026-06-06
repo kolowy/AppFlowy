@@ -1,111 +1,71 @@
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
-import 'package:appflowy/startup/tasks/app_widget.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/space/shared_widget.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/size.dart';
 import 'package:flowy_infra_ui/style_widget/text.dart';
-import 'package:flowy_infra_ui/style_widget/text_input.dart';
 import 'package:flowy_infra_ui/widget/buttons/primary_button.dart';
 import 'package:flowy_infra_ui/widget/buttons/secondary_button.dart';
 import 'package:flowy_infra_ui/widget/dialog/styled_dialogs.dart';
 import 'package:flowy_infra_ui/widget/spacing.dart';
+import 'package:flutter/material.dart';
 import 'package:toastification/toastification.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 export 'package:flowy_infra_ui/widget/dialog/styled_dialogs.dart';
+export 'package:toastification/toastification.dart';
 
-class NavigatorTextFieldDialog extends StatefulWidget {
-  const NavigatorTextFieldDialog({
+class NavigatorCustomDialog extends StatefulWidget {
+  const NavigatorCustomDialog({
     super.key,
-    required this.title,
-    this.autoSelectAllText = false,
-    required this.value,
-    required this.onConfirm,
-    this.onCancel,
-    this.maxLength,
-    this.hintText,
+    required this.child,
+    this.cancel,
+    this.confirm,
+    this.hideCancelButton = false,
   });
 
-  final String value;
-  final String title;
-  final VoidCallback? onCancel;
-  final void Function(String, BuildContext) onConfirm;
-  final bool autoSelectAllText;
-  final int? maxLength;
-  final String? hintText;
+  final Widget child;
+  final void Function()? cancel;
+  final void Function()? confirm;
+  final bool hideCancelButton;
 
   @override
-  State<NavigatorTextFieldDialog> createState() =>
-      _NavigatorTextFieldDialogState();
+  State<NavigatorCustomDialog> createState() => _NavigatorCustomDialog();
 }
 
-class _NavigatorTextFieldDialogState extends State<NavigatorTextFieldDialog> {
-  String newValue = "";
-  final controller = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    newValue = widget.value;
-    controller.text = newValue;
-    if (widget.autoSelectAllText) {
-      controller.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: newValue.length,
-      );
-    }
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
+class _NavigatorCustomDialog extends State<NavigatorCustomDialog> {
   @override
   Widget build(BuildContext context) {
     return StyledDialog(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          FlowyText.medium(
-            widget.title,
-            color: Theme.of(context).colorScheme.tertiary,
-            fontSize: FontSizes.s16,
-          ),
-          VSpace(Insets.m),
-          FlowyFormTextInput(
-            hintText:
-                widget.hintText ?? LocaleKeys.dialogCreatePageNameHint.tr(),
-            controller: controller,
-            textStyle: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(fontSize: FontSizes.s16),
-            maxLength: widget.maxLength,
-            showCounter: false,
-            autoFocus: true,
-            onChanged: (text) {
-              newValue = text;
-            },
-            onEditingComplete: () {
-              widget.onConfirm(newValue, context);
-              AppGlobals.nav.pop();
-            },
-          ),
-          VSpace(Insets.xl),
-          OkCancelButton(
-            onOkPressed: () {
-              widget.onConfirm(newValue, context);
-              Navigator.of(context).pop();
-            },
-            onCancelPressed: () {
-              widget.onCancel?.call();
-              Navigator.of(context).pop();
-            },
-          ),
+          ...[
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 400,
+                maxHeight: 260,
+              ),
+              child: widget.child,
+            ),
+          ],
+          if (widget.confirm != null) ...[
+            const VSpace(20),
+            OkCancelButton(
+              onOkPressed: () {
+                widget.confirm?.call();
+                Navigator.of(context).pop();
+              },
+              onCancelPressed: widget.hideCancelButton
+                  ? null
+                  : () {
+                      widget.cancel?.call();
+                      Navigator.of(context).pop();
+                    },
+            ),
+          ],
         ],
       ),
     );
@@ -299,87 +259,225 @@ class OkCancelButton extends StatelessWidget {
   }
 }
 
-void showToastNotification(
-  BuildContext context, {
-  required String message,
+ToastificationItem showToastNotification({
+  BuildContext? context,
+  String? message,
+  TextSpan? richMessage,
   String? description,
   ToastificationType type = ToastificationType.success,
+  ToastificationCallbacks? callbacks,
+  bool showCloseButton = false,
+  double bottomPadding = 100,
 }) {
-  if (PlatformExtension.isMobile) {
-    toastification.showCustom(
-      alignment: Alignment.bottomCenter,
-      autoCloseDuration: const Duration(milliseconds: 3000),
-      builder: (_, __) => _MToast(
-        message: message,
-        type: type,
-      ),
-    );
-    return;
-  }
-
-  toastification.show(
+  assert(
+    (message == null) != (richMessage == null),
+    "Exactly one of message or richMessage must be non-null.",
+  );
+  return toastification.showCustom(
     context: context,
-    type: type,
-    style: ToastificationStyle.flat,
-    title: FlowyText(
-      message,
-      maxLines: 3,
-    ),
-    description: description != null
-        ? FlowyText.regular(
-            description,
-            fontSize: 12,
-            lineHeight: 1.2,
-            maxLines: 3,
-          )
-        : null,
     alignment: Alignment.bottomCenter,
     autoCloseDuration: const Duration(milliseconds: 3000),
-    showProgressBar: false,
-    backgroundColor: Theme.of(context).colorScheme.surface,
-    borderSide: BorderSide(
-      color: Colors.grey.withOpacity(0.4),
-    ),
+    callbacks: callbacks ?? const ToastificationCallbacks(),
+    builder: (_, item) {
+      return UniversalPlatform.isMobile
+          ? _MobileToast(
+              message: message,
+              type: type,
+              bottomPadding: bottomPadding,
+              description: description,
+            )
+          : DesktopToast(
+              message: message,
+              richMessage: richMessage,
+              type: type,
+              onDismiss: () => toastification.dismiss(item),
+              showCloseButton: showCloseButton,
+            );
+    },
   );
 }
 
-class _MToast extends StatelessWidget {
-  const _MToast({
-    required this.message,
+class _MobileToast extends StatelessWidget {
+  const _MobileToast({
+    this.message,
     this.type = ToastificationType.success,
+    this.bottomPadding = 100,
+    this.description,
   });
 
-  final String message;
+  final String? message;
   final ToastificationType type;
+  final double bottomPadding;
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
-    // only support success type
-    assert(type == ToastificationType.success);
-
+    if (message == null) {
+      return const SizedBox.shrink();
+    }
+    final hintText = FlowyText.regular(
+      message!,
+      fontSize: 16.0,
+      figmaLineHeight: 18.0,
+      color: Colors.white,
+      maxLines: 10,
+    );
+    final descriptionText = description != null
+        ? FlowyText.regular(
+            description!,
+            fontSize: 12,
+            color: Colors.white,
+            maxLines: 10,
+          )
+        : null;
     return Container(
       alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.only(bottom: 100),
+      padding: EdgeInsets.only(
+        bottom: bottomPadding,
+        left: 16,
+        right: 16,
+      ),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 13.0),
+        padding: const EdgeInsets.symmetric(
+          horizontal: 12.0,
+          vertical: 13.0,
+        ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12.0),
           color: const Color(0xE5171717),
         ),
+        child: type == ToastificationType.success
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (type == ToastificationType.success) ...[
+                        const FlowySvg(
+                          FlowySvgs.success_s,
+                          blendMode: null,
+                        ),
+                        const HSpace(8.0),
+                      ],
+                      Expanded(child: hintText),
+                    ],
+                  ),
+                  if (descriptionText != null) ...[
+                    const VSpace(4.0),
+                    descriptionText,
+                  ],
+                ],
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  hintText,
+                  if (descriptionText != null) ...[
+                    const VSpace(4.0),
+                    descriptionText,
+                  ],
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+@visibleForTesting
+class DesktopToast extends StatelessWidget {
+  const DesktopToast({
+    super.key,
+    this.message,
+    this.richMessage,
+    required this.type,
+    this.onDismiss,
+    this.showCloseButton = false,
+  });
+
+  final String? message;
+  final TextSpan? richMessage;
+  final ToastificationType type;
+  final void Function()? onDismiss;
+  final bool showCloseButton;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppFlowyTheme.of(context);
+
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 360.0),
+        padding: EdgeInsets.symmetric(
+          horizontal: theme.spacing.xl,
+          vertical: theme.spacing.l,
+        ),
+        margin: const EdgeInsets.only(bottom: 32.0),
+        decoration: BoxDecoration(
+          color: theme.surfaceColorScheme.inverse,
+          borderRadius: BorderRadius.circular(theme.borderRadius.l),
+          boxShadow: theme.shadow.small,
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const FlowySvg(
-              FlowySvgs.success_s,
+            // icon
+            FlowySvg(
+              switch (type) {
+                ToastificationType.warning => FlowySvgs.toast_warning_filled_s,
+                ToastificationType.success => FlowySvgs.toast_checked_filled_s,
+                ToastificationType.error => FlowySvgs.toast_error_filled_s,
+                _ => throw UnimplementedError(),
+              },
+              size: const Size.square(20.0),
               blendMode: null,
             ),
-            const HSpace(8.0),
-            FlowyText.regular(
-              message,
-              fontSize: 16.0,
-              figmaLineHeight: 18.0,
-              color: Colors.white,
+            HSpace(
+              theme.spacing.m,
             ),
+            // text
+            Flexible(
+              child: message != null
+                  ? Text(
+                      message!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textStyle.body.standard(
+                        color: theme.textColorScheme.onFill,
+                      ),
+                    )
+                  : RichText(
+                      text: richMessage!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+            ),
+            if (showCloseButton) ...[
+              HSpace(
+                theme.spacing.xl,
+              ),
+              // close
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onDismiss,
+                  child: const SizedBox.square(
+                    dimension: 24.0,
+                    child: Center(
+                      child: FlowySvg(
+                        FlowySvgs.toast_close_s,
+                        size: Size.square(20.0),
+                        color: Color(0xFFBDBDBD),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -406,7 +504,7 @@ Future<void> showConfirmDeletionDialog({
           child: ConfirmPopup(
             title: title,
             description: description,
-            onConfirm: onConfirm,
+            onConfirm: (_) => onConfirm(),
           ),
         ),
       );
@@ -418,72 +516,14 @@ Future<void> showConfirmDialog({
   required BuildContext context,
   required String title,
   required String description,
-  VoidCallback? onConfirm,
+  TextStyle? titleStyle,
+  TextStyle? descriptionStyle,
+  void Function(BuildContext context)? onConfirm,
   VoidCallback? onCancel,
   String? confirmLabel,
   ConfirmPopupStyle style = ConfirmPopupStyle.onlyOk,
-}) {
-  return showDialog(
-    context: context,
-    builder: (_) {
-      return Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        child: SizedBox(
-          width: 440,
-          child: ConfirmPopup(
-            title: title,
-            description: description,
-            onConfirm: () => onConfirm?.call(),
-            onCancel: () => onCancel?.call(),
-            confirmLabel: confirmLabel,
-            style: style,
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Future<void> showCancelAndConfirmDialog({
-  required BuildContext context,
-  required String title,
-  required String description,
-  VoidCallback? onConfirm,
-  String? confirmLabel,
-}) {
-  return showDialog(
-    context: context,
-    builder: (_) {
-      return Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        child: SizedBox(
-          width: 440,
-          child: ConfirmPopup(
-            title: title,
-            description: description,
-            onConfirm: () => onConfirm?.call(),
-            confirmLabel: confirmLabel,
-            confirmButtonColor: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-      );
-    },
-  );
-}
-
-Future<void> showCustomConfirmDialog({
-  required BuildContext context,
-  required String title,
-  required String description,
-  required Widget Function(BuildContext) builder,
-  VoidCallback? onConfirm,
-  String? confirmLabel,
-  ConfirmPopupStyle style = ConfirmPopupStyle.onlyOk,
-  bool closeOnConfirm = true,
+  WidgetBuilder? confirmButtonBuilder,
+  Color? confirmButtonColor,
 }) {
   return showDialog(
     context: context,
@@ -497,11 +537,121 @@ Future<void> showCustomConfirmDialog({
           child: ConfirmPopup(
             title: title,
             description: description,
-            onConfirm: () => onConfirm?.call(),
+            titleStyle: titleStyle,
+            descriptionStyle: descriptionStyle,
+            confirmButtonBuilder: confirmButtonBuilder,
+            onConfirm: (_) => onConfirm?.call(context),
+            onCancel: () => onCancel?.call(),
             confirmLabel: confirmLabel,
             style: style,
+            confirmButtonColor: confirmButtonColor,
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> showCancelAndConfirmDialog({
+  required BuildContext context,
+  required String title,
+  required String description,
+  void Function(BuildContext context)? onConfirm,
+  VoidCallback? onCancel,
+  String? confirmLabel,
+}) {
+  return showDialog(
+    context: context,
+    builder: (_) {
+      return Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: SizedBox(
+          width: 440,
+          child: ConfirmPopup(
+            title: title,
+            description: description,
+            onConfirm: (context) => onConfirm?.call(context),
+            confirmLabel: confirmLabel,
+            confirmButtonColor: Theme.of(context).colorScheme.primary,
+            onCancel: () => onCancel?.call(),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> showCustomConfirmDialog({
+  required BuildContext context,
+  required String title,
+  required String description,
+  required Widget Function(BuildContext) builder,
+  VoidCallback? onConfirm,
+  VoidCallback? onCancel,
+  String? confirmLabel,
+  ConfirmPopupStyle style = ConfirmPopupStyle.onlyOk,
+  bool closeOnConfirm = true,
+  bool showCloseButton = true,
+  bool enableKeyboardListener = true,
+  bool barrierDismissible = true,
+}) {
+  return showDialog(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    builder: (context) {
+      return Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: SizedBox(
+          width: 440,
+          child: ConfirmPopup(
+            title: title,
+            description: description,
+            onConfirm: (_) => onConfirm?.call(),
+            onCancel: onCancel,
+            confirmLabel: confirmLabel,
+            confirmButtonColor: Theme.of(context).colorScheme.primary,
+            style: style,
             closeOnAction: closeOnConfirm,
+            showCloseButton: showCloseButton,
+            enableKeyboardListener: enableKeyboardListener,
             child: builder(context),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Future<void> showCancelAndDeleteDialog({
+  required BuildContext context,
+  required String title,
+  required String description,
+  Widget Function(BuildContext)? builder,
+  VoidCallback? onDelete,
+  String? confirmLabel,
+  bool closeOnAction = false,
+}) {
+  return showDialog(
+    context: context,
+    builder: (_) {
+      return Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: SizedBox(
+          width: 440,
+          child: ConfirmPopup(
+            title: title,
+            description: description,
+            onConfirm: (_) => onDelete?.call(),
+            closeOnAction: closeOnAction,
+            confirmLabel: confirmLabel,
+            confirmButtonColor: Theme.of(context).colorScheme.error,
+            child: builder?.call(context),
           ),
         ),
       );

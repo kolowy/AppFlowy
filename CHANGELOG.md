@@ -1,4 +1,715 @@
 # Release Notes
+## Version 0.11.4 – 09/03/2026
+### Desktop
+#### New Features
+- Notification System: In-app notification center to track mentions, reminders, and activity updates
+- Revamped Slash Menu: Redesigned `/` command menu with improved layout and discoverability
+- Editor Block Spacing: Optimize spacing between blocks in the document editor
+
+#### Bug Fixes
+- Fixed row document issues
+- Fixed bulk delete not working correctly
+- Fixed connection check causing unnecessary errors
+
+### Mobile
+#### New Features
+- Notification System: In-app notification center to track mentions, reminders, and activity updates
+- Revamped Slash Menu: Redesigned `/` command menu with improved layout and discoverability
+- Editor Block Spacing: Optimize spacing between blocks in the document editor
+
+#### Bug Fixes
+- Fixed mobile block selection disappearing
+- Fixed select-all behavior with Gboard on Android
+- Fixed duplicate column names when creating board groups
+
+## Version 0.11.3 – 25/02/2026
+### Desktop
+#### Bug Fixes
+- Fixed the space dropdown menu not displaying correctly
+- Fixed relation filter not applying correctly in advanced filter scenarios
+- Fixed the disconnect banner not refreshing properly
+
+### Mobile
+#### Bug Fixes
+- Fixed losing focus after typing the first character in a text cell
+- Fixed FCM blocking the main app on startup
+
+## Version 0.11.2 – 14/02/2026
+### Desktop
+#### New Features
+- New Database View: Feed view
+- AI Transcript & Meeting Blocks: Automatic speaker name guessing, referenced AI summaries, and meeting detection from Google Meet and Slack
+- Google Drive Block: Embed and select Google Drive files via link or connected account
+
+#### Bug Fixes
+- File Block: Display upload progress during file uploads
+- Image Upload: Improved upload indicator and instant image caching
+- Unsplash Cover Image: Improved preview and keyboard navigation
+
+### Mobile
+#### New Features
+- New Database View: Feed view
+- Google Drive Block: Embed and select Google Drive files via link or connected account
+
+#### Bug Fixes
+- File Block: Display upload progress during file uploads
+- Image Upload: Improved upload indicator and instant image caching
+
+## Version 0.11.1 – 28/01/2026
+### Desktop
+#### New Features
+- New Database Views: Gallery, List, and Chart views
+- Grouping in a Grid (Table) view: Group by allows you to organize database entries into collapsible sections based on property values (e.g., Status, Priority)
+- Multi-row actions: Allows for powerful multi-row (bulk) actions within databases to edit, delete, or duplicate all at once
+- Database advanced filters: Useful when combining AND logic and OR logic in your filter
+- Number property new formats: Comma separated and percent
+- Export as PDF: Export a single page as .PDF
+- Database Cover Images: Added support for cover images to enhance visual representation
+- AI Transcript & Meeting Notes: Use the mention person type for task assignees in the action items of the AI summary
+
+#### Bug Fixes
+- Enhanced playback experience for video blocks
+- Resolved issue with inline mention styles not matching block text styles
+
+### Mobile
+#### New Features
+- New Database Views: Gallery, List, and Chart views
+
+#### Bug Fixes
+- Improved playback experience for video blocks
+- Fixed issue with inline mention styles not matching block text styles
+
+## Version 0.11.0 – 12/01/2026
+### Desktop
+#### Bug Fixes
+- Fixed row detail page button style not following theme changes
+- Fixed target limit not being removed when creating two-way relation field
+- Improved speaker selector menu UI style in the transcript tab of AI meeting block
+
+## Version 0.10.9 – 09/01/2026
+### Desktop
+#### New Features
+- Database Rollup: A powerful property used to retrieve and aggregate information from items in a related database
+- Database search: Search names of database pages, as well as property values (such as a status of "In progress") and content inside database pages
+- AI Transcript with auto speaker identification: Upload an audio file to generate transcriptions with speaker labels. You can assign or change speaker names
+- AI Meeting Notes with auto speaker identification: Real-time transcription during meetings with automatic speaker label detection after recording stops. You can assign or change speaker names
+- Mermaid diagram support: Add diagrams directly in Code blocks with split, preview, and code display modes, plus an expandable view
+- Top nav bar breadcrumb revamp: Refreshed design with improved layout
+- Document and database cover reposition: Reposition cover images for the best display
+
+#### Bug Fixes
+- Fixed various database issues to improve stability and performance
+
+### Mobile
+#### New Features
+- AI Transcript with auto speaker identification: Upload an audio file to generate transcriptions with speaker labels. You can assign or change speaker names
+- Mermaid diagram support: Add diagrams directly in Code blocks with split, preview, and code display modes, plus an expandable view
+
+#### Bug Fixes
+- Fixed various database issues to improve stability and performance
+
+## Version 0.10.8 – 22/12/2025
+### Desktop
+#### Bug Fixes
+- Grid sort order preserved after edits — Editing a row no longer moves it to the bottom of a sorted Grid
+- Delete banner for databases — Grid, Board, and Calendar now show restore/delete banner when deleted
+- Timestamp field conversion — Converting Created time or Last modified to Text/Date no longer loses values
+- Unicode string sorting — Sorting now handles accented characters and special symbols correctly
+- Kanban filter fix — Filters now apply correctly to items added after view creation
+
+### Mobile
+#### Bug Fixes
+- Grid sort order preserved after edits — Editing a row no longer moves it to the bottom of a sorted Grid
+- Timestamp field conversion — Converting Created time or Last modified to Text/Date no longer loses values
+- Unicode string sorting — Sorting now handles accented characters and special symbols correctly
+- Kanban filter fix — Filters now apply correctly to items added after view creation
+
+## Version 0.10.7 – 19/12/2025
+### Desktop
+#### New Features
+- AI Meeting Notes Block: Supports real-time transcription on macOS and Windows. AI will turn everything into a clean, share-ready summary
+- Database Two-way Relations: Automatically sync connected data between databases, ensuring that information added in one place instantly appears in the other
+- Video Block: Upload or embed video files, then view and interact with them directly inside your document
+- Audio Block: Upload or embed audio files, then view and interact with them directly inside your document
+- Callout Block: Supports removing the callout icon
+- Table of Contents Block: Supports collapsing/uncollapsing the content
+
+#### Bug Fixes
+- Fixed various issues related to database views, including sorting, filtering, counting, syncing, and layouts
+- Fixed various issues related to the linked views of databases
+- Fixed database issues related to date formats, file name display, view tabs, horizontal scroll, and Relation property performance
+
+### Mobile
+#### New Features
+- Video Block: Upload or embed video files, then view and interact with them directly inside your document
+- Audio Block: Upload or embed audio files, then view and interact with them directly inside your document
+- Callout Block: Supports removing the callout icon
+- Table of Contents Block: Supports collapsing/uncollapsing the content
+
+#### Bug Fixes
+- Fixed various issues related to database views, including sorting, filtering, counting, syncing, and layouts
+- Fixed various issues related to the linked views of databases
+- Fixed database issues related to date formats, file name display, view tabs, horizontal scroll, and Relation property performance
+
+## Version 0.10.6 – 05/12/2025
+### Desktop
+#### Bug Fixes
+- Fixed issues related to the duplicated databases
+- Fixed an issue where the Chinese (Simplified) and Chinese (Traditional) language options were not being saved properly in the summary language of the AI meeting block
+
+### Mobile
+#### Bug Fixes
+- Fixed issues related to the duplicated databases
+
+## Version 0.10.5 – 02/12/2025
+### Desktop
+#### New Features
+- AI Transcript Block: Turn audio and video recordings into ready-to-share notes with AI Transcribe. Easily use our rich-text editing features to refine both the AI transcription and summary. Perfect for work, school, or personal projects
+- PDF Block: Upload or embed PDF files, then view and interact with them directly inside your document
+- Improved Image Block: Supported new features such as captions, embedded external or page links, saving images, and replacing images with more polished visuals and interactions
+- Self-hosted: Enabled custom namespaces, fixed issues with inviting members via link, and removed Pro plan banners that were intended for the managed cloud version
+
+### Mobile
+#### New Features
+- PDF Block: Upload or embed PDF files, then view and interact with them directly inside your document
+- Improved Image Block: Supported new features such as captions, embedded external or page links, saving images, and replacing images—with more polished visuals and interactions
+- Self-hosted: Fixed issues with inviting members via link, and removed Pro plan banners that were intended for the managed cloud version
+
+## Version 0.10.4 – 14/11/2025
+### Desktop
+#### New Features
+- Revamped the Math Equation block with an easier-to-use UX and new features: multiline equations, more environment variables, inline math equation markdown support, and Ask AI
+- Revamped the Toggle List block with an improved UI and bug fixes
+- Revamped the right-click Context Menu with a more polished UI and new features: Paste as plain text and Ask AI
+
+#### Bug Fixes
+- Fixed issues related to the Math Equation and Toggle List blocks
+- Fixed issues related to the right-click Context Menu
+
+### Mobile
+#### New Features
+- Revamped the Math Equation and Toggle List blocks with improved UIs and new features
+
+#### Bug Fixes
+- Fixed issues related to the Math Equation and Toggle List blocks
+
+## Version 0.10.3 – 31/10/2025
+### Desktop
+#### New Features
+- Revamped the Code block with new features: pin language, caption, Ask AI, and Turn Text into Code
+- Revamped the Callout block with an improved UI and quick styles
+- Revamped the Outline block with a more polished UI and custom background colors
+- Notification Settings: enable or disable mobile push notifications
+
+#### Bug Fixes
+- Fixed issues related to the Code and Callout blocks
+
+### Mobile
+#### New Features
+- Supported mobile push notifications: you'll receive a push message when you're mentioned, invited to a page, or when page permissions change
+- Revamped the Code, Callout, and Outline blocks with improved UIs and new features
+
+## Version 0.10.2 – 24/10/2025
+### Desktop
+#### Bug Fixes
+- Fixed inability to import Notion zip file
+
+## Version 0.10.1 – 16/10/2025
+### Desktop
+#### Bug Fixes
+- Fixed potential login token expired issue
+- Fixed inability to create Vault workspace on self-hosted servers with commercial plans
+- Fixed switching page rapidly caused the page flash
+
+### Mobile
+#### Bug Fixes
+- Fixed potential login token expired issue
+
+## Version 0.10.0 – 29/09/2025
+### Desktop
+#### New Features
+- Person, a new database property, lets you assign a row to one or more collaborators
+
+### Mobile
+#### New Features
+- Person, a new database property, lets you assign a row to one or more collaborators
+- iOS Share to AppFlowy: quickly save a web page with optional notes to a target AppFlowy page or database
+- Android Share to AppFlowy: quickly save a web page with optional notes to a target AppFlowy page or database
+- A new Android widget: Quick Page Access
+
+## Version 0.9.9 – 11/09/2025
+### Desktop
+#### New Features
+- Workspace user profile: customize your avatar, about me, and profile card banner
+
+### Mobile
+#### New Features
+- Workspace user profile: customize your avatar, about me, and profile card banner
+- Two new Android widgets: Recent Pages and Favorites
+- A new iOS widget: Quick Page Access
+- iOS Share to AppFlowy: quickly save browser page links with optional notes to a target AppFlowy page
+
+## Version 0.9.8 – 28/08/2025
+### Desktop
+#### New Features
+- Bulk add collaborators with Can view / Can edit permissions via the Share menu
+- Enable setting the start of the week to Monday to control default calendar layouts in the calendar view and date picker
+- Sync date and time formats, language, and week start day across devices under the same user account
+- Offer 10 premium Select-option colors to Pro Plan users
+- Support managing pending members via Settings → Members
+
+### Mobile
+#### New Features
+- Support iOS widgets for quick access to recent and favorite pages
+- Offer 10 premium Select option colors to Pro Plan users
+- Support managing pending members via Settings → Members
+
+## Version 0.9.7 – 13/08/2025
+### Desktop
+#### New Features
+- Mention or assign persons in documents via '@' or '/'
+- Mentioned persons get notified about the mention via email
+- More colors are available for database Select options and page covers
+- Back up your AppFlowy workspace: Export your workspace as a ZIP file and import it back at any time
+- GPT-5 is now available in AppFlowy
+
+### Mobile
+#### New Features
+- Mention or assign persons in documents via '@' or '/'
+- Mentioned persons get notified about the mention via email
+- More colors are available for database Select options and page cover
+
+#### Bug Fixes
+- Fixed login page UI overflow issues on small screen devices
+
+## Version 0.9.6 – 05/08/2025
+
+### Bug Fixes
+- Fixed some syncing issues
+- Improved the Share menu
+- Fixed some UI issues related to database filters and sorts
+
+## Version 0.9.5 – 17/07/2025
+### Desktop
+#### New Features
+- Vault Workspace: A new workspace type, private and offline. AI runs locally with no data transfer. Supports switching embedding models, chatting with files (PDF, Markdown, TXT). Includes RAG search with AI-generated overviews.
+- Revamped color pickers in documents: Expanded palette with support for custom colors
+
+### Mobile
+#### New Features
+- iOS In‑App Sign‑In: Sign in directly within the iOS app
+- New colors: Improved text and background color options
+
+Bug Fixes
+- Add a network connection indicator
+- Fix sync bugs and issues with WebSocket connections.
+
+## Version 0.9.4 – 02/07/2025
+### Desktop
+#### New Features
+- Private page sharing: Add members to private pages with Can View or Can Edit permissions
+- Guest editor collaboration: Invite non-members (guest editors) to collaborate in real-time on your pages
+- Shared with me: Browse all pages shared with you under the new Shared with me section
+- New syncing protocol: Optimized for faster, more reliable multi-user and multi-device data sync
+### Mobile
+#### New Features
+- Shared page collaboration: View and edit pages that have been shared with you on iOS and Android
+- New syncing protocol: Optimized for faster, more reliable multi-user and multi-device data sync
+
+## Version 0.9.3 - 28/05/2025
+### Desktop
+#### New Features
+- Meet AppFlowy Workspace AI Search: Quickly find pages by searching titles, keywords, or asking natural-language questions
+- AI Overviews: Ask natural questions and receive instant AI-generated summaries with source links, inspired by Google's AI Overviews
+- Revamped Search Panel: A cleaner, smarter interface to help you search faster and more effectively
+- Custom Prompts: Load a database page as the source for your own custom AI prompts
+#### Bug Fixes
+- Fixed misalignment in database view after setting maxDocumentWidth
+- Centered embedded link when the site name is empty
+- Fixed issue where row observer was not clearing as expected
+- Fixed issue where workspace name reverted after being updated
+- Aligned checkbox icon with the first line of text
+### Mobile
+#### New Features
+- Meet AppFlowy Workspace AI Search: Quickly find pages by searching titles, keywords, or asking natural-language questions
+- AI Overviews: Ask natural questions and receive instant AI-generated summaries with source links, inspired by Google's AI Overviews
+- Revamped Search Tab: A redesigned interface that helps you find what you need more efficiently
+#### Bug Fixes
+- Fixed issue where font size reset after restarting the app
+
+## Version 0.9.2 - 14/05/2025
+### Desktop
+#### New Features
+- Supported AI Overview in Search to answer user queries based on their entire workspace
+- Revamped the Search panel in the desktop app
+- Enabled loading custom prompts from an AppFlowy database page
+#### Bug Fixes
+- Improved inserting emojis using the colon (:)
+- Supported automatically filling the link name with the URL if the name is left empty
+### Mobile
+#### Bug Fixes
+- Supported automatically filling the link name with the URL if the name is left empty
+
+## Version 0.9.1 - 01/05/2025
+### Desktop
+#### New Features
+- Added AppFlowy Prompt Library to AI Chat and Document's Ask AI
+- Revamped the desktop in-app notification center
+- Supported login with password, as well as forgot and change password options
+- Supported copying link to invite members
+- Improved the Settings' Members tab with new metadata: member avatar and joined time
+#### Bug Fixes
+- Fixed data loss when using anonymous local
+- Fixed crash when trying to delete an emoji
+- Fixed Windows scaling issue
+- Correctly displayed mention text by decoding web content
+### Mobile
+#### New Features
+- Supported workspace search
+- Improved UX for links in documents
+- Supported changing password in Mobile Settings
+- Added support for inviting members via links
+#### Bug Fixes
+- Correctly displayed mention text by decoding web content
+
+## Version 0.9.0 - 30/04/2025
+### Desktop
+#### New Features
+- Added AppFlowy Prompt Library to AI Chat and Document's Ask AI
+- Revamped the desktop in-app notification center
+- Supported login with password, as well as forgot and change password options
+- Supported copying link to invite members
+- Improved the Settings' Members tab with new metadata: member avatar and joined time
+#### Bug Fixes
+- Fixed crash when trying to delete an emoji
+- Fixed Windows scaling issue
+- Correctly displayed mention text by decoding web content
+### Mobile
+#### New Features
+- Supported workspace search
+- Improved UX for links in documents
+- Supported changing password in Mobile Settings
+- Added support for inviting members via links
+#### Bug Fixes
+- Correctly displayed mention text by decoding web content
+
+## Version 0.8.9 - 16/04/2025
+### Desktop
+#### New Features
+- Supported pasting a link as a mention, providing a more condensed visualization of linked content
+- Supported converting between link formats (e.g. transforming a mention into a bookmark)
+- Improved the link editing experience with enhanced UX
+- Added OTP (One-Time Password) support for sign-in authentication
+- Added latest AI models: GPT-4.1, GPT-4.1-mini, and Claude 3.7 Sonnet
+#### Bug Fixes
+- Fixed an issue where properties were not displaying in the row detail page
+- Fixed a bug where Undo didn't work in the row detail page
+- Fixed an issue where blocks didn't grow when the grid got bigger
+- Fixed several bugs related to AI writers
+### Mobile
+#### New Features
+- Added sign-in with OTP (One-Time Password)
+#### Bug Fixes
+- Fixed an issue where the slash menu sometimes failed to display
+- Updated the mention page block to handle page selection with more context.
+
+## Version 0.8.8 - 01/04/2025
+### New Features
+- Added support for selecting AI models in AI writer
+- Revamped link menu in toolbar
+- Added support for using ":" to add emojis in documents
+- Passed the history of past AI prompts and responses to AI writer
+### Bug Fixes
+- Improved AI writer scrolling user experience
+- Fixed issue where checklist items would disappear during reordering
+- Fixed numbered lists generated by AI to maintain the same index as the input
+
+## Version 0.8.7 - 18/03/2025
+### New Features
+- Made local AI free and integrated with Ollama
+- Supported nested lists within callout and quote blocks
+- Revamped the document's floating toolbar and added Turn Into
+- Enabled custom icons in callout blocks
+### Bug Fixes
+- Fixed occasional incorrect positioning of the slash menu
+- Improved AI Chat and AI Writers with various bug fixes
+- Adjusted the columns block to match the width of the editor
+- Fixed a potential segfault caused by infinite recursion in the trash view
+- Resolved an issue where the first added cover might be invisible
+- Fixed adding cover images via Unsplash
+
+## Version 0.8.6 - 06/03/2025
+### Bug Fixes
+- Fix the incorrect title positioning when adjusting the document width setting
+- Enhance the user experience of the icon color picker for smoother interactions
+- Add missing icons to the database to ensure completeness and consistency
+- Resolve the issue with links not functioning correctly on Linux systems
+- Improve the outline feature to work seamlessly within columns
+- Center the bulleted list icon within columns for better visual alignment
+- Enable dragging blocks under tables in the second column to enhance flexibility
+- Disable the AI writer feature within tables to prevent conflicts and improve usability
+- Automatically enable the header row when converting content from Markdown to ensure proper formatting
+- Use the "Undo" function to revert the auto-formatting
+
+## Version 0.8.5 - 04/03/2025
+### New Features
+- Columns in Documents: Arrange content side by side using drag-and-drop or the slash menu
+- AI Writers: New AI assistants in documents with response formatting options (list, table, text with images, image-only), follow-up questions, contextual memory, and more
+- Compact Mode for Databases: Enable compact mode for grid and kanban views (full-page and inline) to increase information density, displaying more data per screen
+### Bug Fixes
+- Fixed an issue where callout blocks couldn’t be deleted when appearing as the first line in a document
+- Fixed a bug preventing the relation field in databases from opening
+- Fixed an issue where links in documents were unclickable on Linux
+
+## Version 0.8.4 - 18/02/2025
+### New Features
+- Switch AI mode on mobile
+- Support locking page
+- Support uploading svg file as icon
+- Support the slash, at, and plus menus on mobile
+### Bug Fixes
+- Gallery not rendering in row page
+- Save image should not copy the image (mobile)
+- Support exporting more content to markdown
+
+## Version 0.8.2 - 23/01/2025
+### New Features
+- Customized database view icons
+- Support for uploading images as custom icons
+- Enabled selecting multiple AI messages to save into a document
+- Added the ability to scale the app's display size on mobile
+- Support for pasting image links without file extensions
+### Bug Fixes
+- Fixed an issue where pasting tables from other apps wasn't working
+- Fixed homepage URL issues in Settings
+- Fixed an issue where the 'Cancel' button was not visible on the Shortcuts page
+
+## Version 0.8.1 - 14/01/2025
+### New Features
+- AI Chat Layout Options: Customize how AI responses appear with new layouts—List, Table, Image with Text, and Media Only
+- DALL-E Integration: Generate stunning AI images from text prompts, now available in AI Chat
+- Improved Desktop Search: Find what you need faster using keywords or by asking questions in natural language
+- Self-Hosting: Configure web server URLs directly in Settings to enable features like Publish, Copy Link to Share, Custom URLs, and more
+- Sidebar Enhancement: Drag to reorder your favorited pages in the Sidebar
+- Mobile Table Resizing: Adjust column widths in Simple Tables by long pressing the column borders on mobile
+### Bug Fixes
+- Resolved an icon rendering issue in callout blocks, tab bars, and search results
+- Enhanced image reliability: Retry functionality ensures images load successfully if the first attempt fails
+
+## Version 0.8.0 - 06/01/2025
+### Bug Fixes
+- Fixed error displaying in the page style menu
+- Fixed filter logic in the icon picker
+- Fixed error displaying in the Favorite/Recent page
+- Fixed the color picker displaying when tapping down
+- Fixed icons not being supported in subpage blocks
+- Fixed recent icon functionality in the space icon menu
+- Fixed "Insert Below" not auto-scrolling the table
+- Fixed a to-do item with an emoji automatically creating a soft break
+- Fixed header row/column tap areas being too small
+- Fixed simple table alignment not working for items that wrap
+- Fixed web content reverting after removing the inline code format on desktop
+- Fixed inability to make changes to a row or column in the table when opening a new tab
+- Fixed changing the language to CKB-KU causing a gray screen on mobile
+
+## Version 0.7.9 - 30/12/2024
+### New Features
+- Meet AppFlowy Web (Lite): Use AppFlowy directly in your browser.
+  - Create beautiful documents with 22 content types and markdown support
+  - Use Quick Note to save anything you want to remember—like meeting notes, a grocery list, or to-dos
+  - Invite members to your workspace for seamless collaboration
+  - Create multiple public/private spaces to better organize your content
+- Simple Table is now available on Mobile, designed specifically for mobile devices.
+  - Create and manage Simple Table blocks on Mobile with easy-to-use action menus.
+  - Use the '+' button in the fixed toolbar to easily add a content block into a table cell on Mobile
+  - Use '/' to insert a content block into a table cell on Desktop
+- Add pages as AI sources in AI chat, enabling you to ask questions about the selected sources
+- Add messages to an editable document while chatting with AI side by side
+- The new Emoji menu now includes Icons with a Recent section for quickly reusing emojis/icons
+- Drag a page from the sidebar into a document to easily mention the page without typing its title
+- Paste as plain text, a new option in the right-click paste menu
+### Bug Fixes
+- Fixed misalignment in numbered lists
+- Resolved several bugs in the emoji menu
+- Fixed a bug with checklist items
+
+## Version 0.7.8 - 18/12/2024
+### New Features
+<img width="1068" alt="image" src="https://github.com/user-attachments/assets/cf8bd287-f370-4291-8638-76e2bbf4aaac" />
+
+- Meet Simple Table 2.0:
+   - Insert a list into a table cell
+   - Insert images, quotes, callouts, and code blocks into a table cell
+   - Drag to move rows or columns
+   - Toggle header rows or columns on/off
+   - Distribute columns evenly
+   - Adjust to page width
+- Enjoy a new UI/UX for a seamless experience
+- Revamped mention page interactions in AI Chat
+- Improved AppFlowy AI service
+
+### Bug Fixes
+- Fixed an error when opening files in the database in local mode
+- Fixed arrow up/down navigation not working for selecting a language in Code Block
+- Fixed an issue where deleting multiple blocks using the drag button on the document page didn’t work
+
+## Version 0.7.7 - 09/12/2024
+### Bug Fixes
+- Fixed sidebar menu resize regression
+- Fixed AI chat loading issues
+- Fixed inability to open local files in database
+- Fixed mentions remaining in notifications after removal from document
+- Fixed event card closing when clicking on empty space
+- Fixed keyboard shortcut issues
+
+## Version 0.7.6 - 03/12/2024
+### New Features
+- Revamped the simple table UI
+- Added support for capturing images from camera on mobile
+### Bug Fixes
+- Improved markdown rendering capabilities in AI writer
+- Fixed an issue where pressing Enter on a collapsed toggle list would add an unnecessary new line
+- Fixed an issue where creating a document from slash menu could insert content at incorrect position
+
+## Version 0.7.5 - 25/11/2024
+### Bug Fixes
+- Improved chat response parsing
+- Fixed toggle list icon direction for RTL mode
+- Fixed cross blocks formatting not reflecting in float toolbar
+- Fixed unable to click inside the toggle list to create a new paragraph
+- Fixed open file error 50 on macOS
+- Fixed upload file exceed limit error
+
+## Version 0.7.4 - 19/11/2024
+### New Features
+- Support uploading WebP and BMP images
+- Support managing workspaces on mobile
+- Support adding toggle headings on mobile
+- Improve the AI chat page UI
+### Bug Fixes
+- Optimized the workspace menu loading performance
+- Optimized tab switching performance
+- Fixed searching issues in Document page
+
+## Version 0.7.3 - 07/11/2024
+### New Features
+- Enable custom URLs for published pages
+- Support toggling headings
+- Create a subpage by typing in the document
+- Turn selected blocks into a subpage
+- Add a manual date picker for the Date property
+
+### Bug Fixes
+- Fixed an issue where the workspace owner was unable to delete spaces created by others
+- Fixed cursor height inconsistencies with text height
+- Fixed editing issues in Kanban cards
+- Fixed an issue preventing images or files from being dropped into empty paragraphs
+
+## Version 0.7.2 - 22/10/2024
+### New Features
+- Copy link to block
+- Support turn into in document
+- Enable sharing links and publishing pages on mobile
+- Enable drag and drop in row documents
+- Right-click on page in sidebar to open more actions
+- Create new subpage in document using `+` character
+- Allow reordering checklist item
+
+### Bug Fixes
+- Fixed issue with inability to cancel inline code format in French IME
+- Fixed delete with Shift or Ctrl shortcuts not working in documents
+- Fixed the issues with incorrect time zone being used in filters.
+
+## Version 0.7.1 - 07/10/2024
+### New Features
+- Copy link to share and open it in a browser
+- Enable the ability to edit the page title within the body of the document
+- Filter by last modified, created at, or a date range
+- Allow customization of database property icons
+- Support CTRL/CMD+X to delete the current line when the selection is collapsed in the document
+- Support window tiling on macOS
+- Add filters to grid views on mobile
+- Create and manage workspaces on mobile
+- Automatically convert property types for imported CSV files
+
+### Bug Fixes
+- Fixed calculations with filters applied
+- Fixed issues with importing data folders into a cloud account
+- Fixed French IME backtick issues
+- Fixed selection gesture bugs on mobile
+
+## Version 0.7.0 - 19/09/2024
+### New Features
+- Support reordering blocks in document with drag and drop
+- Support for adding a cover to a row/card in databases
+- Added support for accessing settings on the sign-in page
+- Added "Move to" option to the document menu in top right corner
+- Support for adjusting the document width from settings
+- Show full name of a group on hover
+- Colored group names in kanban boards
+- Support "Ask AI" on multiple lines of text
+- Support for keyboard gestures to move cursor on Mobile
+- Added markdown support for quickly inserting a code block using three backticks
+
+### Bug Fixes
+- Fixed a critical bug where the backtick character would crash the application
+- Fixed an issue with signing-in from the settings dialog where the dialog would persist
+- Fixed a visual bug with icon alignment in primary cell of database rows
+- Fixed a bug with filters applied where new rows were inserted in wrong position
+- Fixed a bug where "Untitled" would override the name of the row
+- Fixed page title not updating after renaming from "More"-menu
+- Fixed File block breaking row detail document
+- Fixed issues with reordering rows with sorting rules applied
+- Improvements to the File & Media type in Database
+- Performance improvement in Grid view
+- Fixed filters sometimes not applying properly in databases
+
+## Version 0.6.9 - 09/09/2024
+### New Features
+- Added a new property type, 'Files & media'
+- Supported Apple Sign-in
+- Displayed the page icon next to the row name when the row page contains nested notes
+- Enabled Delete Account in Settings
+- Included a collapsible navigation menu in your published site
+
+### Bug Fixes
+- Fixed the space name color issue in the community themes
+- Fixed database filters and sorting issues
+- Fixed the issue of not being able to fully display the title on Kanban cards
+- Fixed the inability to see the entire text of a checklist item when it's more than one line long
+- Fixed hide/unhide buttons in the No Status group
+- Fixed the inability to edit group names on Kanban boards
+- Made error codes more user-friendly
+- Added leading zeros to day and month in date format
+
+## Version 0.6.8 - 22/08/2024
+### New Features
+- Enabled viewing data inside a database record on mobile.
+- Added the ability to invite members to a workspace on mobile.
+- Introduced Ask AI in the Home tab on mobile.
+- Import CSV files with up to 1,000 rows.
+- Convert properties from one type to another while preserving the data.
+- Optimized the speed of opening documents and databases.
+- Improved syncing performance across devices.
+- Added support for a monochrome app icon on Android.
+
+### Bug Fixes
+- Removed the Wayland header from the AppImage build.
+- Fixed the issue where pasting a web image on mobile failed.
+- Corrected the Local AI state when switching between different workspaces.
+- Fixed high CPU usage when opening large databases.
+
+## Version 0.6.7 - 13/08/2024
+### New Features
+- Redesigned the icon picker design on Desktop.
+- Redesigned the notification page on Mobile.
+
+### Bug Fixes
+- Enhance the toolbar tooltip functionality on Desktop.
+- Enhance the slash menu user experience on Desktop.
+- Fixed the issue where list style overrides occurred during text pasting.
+- Fixed the issue where linking multiple databases in the same document could cause random loss of focus.
+
 ## Version 0.6.6 - 30/07/2024
 ### New Features
 - Upgrade your workspace to a premium plan to unlock more features and storage.

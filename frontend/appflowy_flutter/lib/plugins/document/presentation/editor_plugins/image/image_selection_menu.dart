@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/plugins/document/presentation/editor_plugins/base/selectable_svg_widget.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/custom_image_block_component/custom_image_block_component.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/image_placeholder.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/multi_image_block_component/multi_image_block_component.dart';
-import 'package:appflowy_editor/appflowy_editor.dart' hide Log;
+import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 final customImageMenuItem = SelectionMenuItem(
@@ -28,8 +30,9 @@ final customImageMenuItem = SelectionMenuItem(
 
 final multiImageMenuItem = SelectionMenuItem(
   getName: () => LocaleKeys.document_plugins_photoGallery_name.tr(),
-  icon: (_, isSelected, style) => SelectionMenuIconWidget(
-    icon: Icons.photo_library_outlined,
+  icon: (_, isSelected, style) => SelectableSvgWidget(
+    data: FlowySvgs.image_s,
+    size: const Size.square(16.0),
     isSelected: isSelected,
     style: style,
   ),
@@ -55,26 +58,20 @@ extension InsertImage on EditorState {
     if (selection == null || !selection.isCollapsed) {
       return;
     }
-    final node = getNodeAtPath(selection.end.path);
-    if (node == null) {
+    final path = selection.end.path;
+    final node = getNodeAtPath(path);
+    final delta = node?.delta;
+    if (node == null || delta == null) {
       return;
     }
     final emptyImage = imageNode(url: '')
       ..extraInfos = {kImagePlaceholderKey: key};
-    final transaction = this.transaction;
-    // if the current node is empty paragraph, replace it with image node
-    if (node.type == ParagraphBlockKeys.type &&
-        (node.delta?.isEmpty ?? false)) {
-      transaction
-        ..insertNode(node.path, emptyImage)
-        ..deleteNode(node);
-    } else {
-      transaction.insertNode(node.path.next, emptyImage);
-    }
 
-    transaction.afterSelection =
-        Selection.collapsed(Position(path: node.path.next));
-    transaction.selectionExtraInfo = {};
+    final insertedPath = delta.isEmpty ? path : path.next;
+    final transaction = this.transaction
+      ..insertNode(insertedPath, emptyImage)
+      ..insertNode(insertedPath, paragraphNode())
+      ..afterSelection = Selection.collapsed(Position(path: insertedPath.next));
 
     return apply(transaction);
   }
@@ -84,26 +81,20 @@ extension InsertImage on EditorState {
     if (selection == null || !selection.isCollapsed) {
       return;
     }
-    final node = getNodeAtPath(selection.end.path);
-    if (node == null) {
+    final path = selection.end.path;
+    final node = getNodeAtPath(path);
+    final delta = node?.delta;
+    if (node == null || delta == null) {
       return;
     }
     final emptyBlock = multiImageNode()
       ..extraInfos = {kMultiImagePlaceholderKey: key};
-    final transaction = this.transaction;
-    // if the current node is empty paragraph, replace it with image node
-    if (node.type == ParagraphBlockKeys.type &&
-        (node.delta?.isEmpty ?? false)) {
-      transaction
-        ..insertNode(node.path, emptyBlock)
-        ..deleteNode(node);
-    } else {
-      transaction.insertNode(node.path.next, emptyBlock);
-    }
 
-    transaction.afterSelection =
-        Selection.collapsed(Position(path: node.path.next));
-    transaction.selectionExtraInfo = {};
+    final insertedPath = delta.isEmpty ? path : path.next;
+    final transaction = this.transaction
+      ..insertNode(insertedPath, emptyBlock)
+      ..insertNode(insertedPath, paragraphNode())
+      ..afterSelection = Selection.collapsed(Position(path: insertedPath.next));
 
     return apply(transaction);
   }

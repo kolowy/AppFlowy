@@ -1,84 +1,124 @@
+import 'dart:async';
+
+import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/application/page_style/document_page_style_bloc.dart';
 import 'package:appflowy/plugins/document/presentation/editor_configuration.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/plugins.dart';
-import 'package:appflowy/plugins/document/presentation/editor_style.dart';
 import 'package:appflowy/shared/markdown_to_document.dart';
-import 'package:appflowy/util/theme_extension.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:flowy_infra/theme_extension.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:markdown_widget/markdown_widget.dart';
+import 'package:universal_platform/universal_platform.dart';
 
-import 'selectable_highlight.dart';
+import '../chat_editor_style.dart';
 
-enum AIMarkdownType {
-  appflowyEditor,
-  markdownWidget,
-}
-
-// Wrap the appflowy_editor or markdown_widget as a chat text message widget
+// Wrap the appflowy_editor as a chat text message widget
 class AIMarkdownText extends StatelessWidget {
   const AIMarkdownText({
     super.key,
     required this.markdown,
-    this.type = AIMarkdownType.appflowyEditor,
+    this.withAnimation = false,
   });
 
   final String markdown;
-  final AIMarkdownType type;
+  final bool withAnimation;
 
   @override
   Widget build(BuildContext context) {
-    switch (type) {
-      case AIMarkdownType.appflowyEditor:
-        return BlocProvider(
-          create: (context) => DocumentPageStyleBloc(view: ViewPB())
-            ..add(const DocumentPageStyleEvent.initial()),
-          child: _AppFlowyEditorMarkdown(markdown: markdown),
-        );
-      case AIMarkdownType.markdownWidget:
-        return _ThirdPartyMarkdown(markdown: markdown);
-    }
+    return BlocProvider(
+      create: (context) => DocumentPageStyleBloc(view: ViewPB())
+        ..add(const DocumentPageStyleEvent.initial()),
+      child: _AppFlowyEditorMarkdown(
+        markdown: markdown,
+        withAnimation: withAnimation,
+      ),
+    );
   }
 }
 
 class _AppFlowyEditorMarkdown extends StatefulWidget {
   const _AppFlowyEditorMarkdown({
     required this.markdown,
+    this.withAnimation = false,
   });
 
   // the text should be the markdown format
   final String markdown;
+
+  /// Whether to animate the text.
+  final bool withAnimation;
 
   @override
   State<_AppFlowyEditorMarkdown> createState() =>
       _AppFlowyEditorMarkdownState();
 }
 
-class _AppFlowyEditorMarkdownState extends State<_AppFlowyEditorMarkdown> {
+class _AppFlowyEditorMarkdownState extends State<_AppFlowyEditorMarkdown>
+    with TickerProviderStateMixin {
   late EditorState editorState;
   late EditorScrollController scrollController;
+  late Timer markdownOutputTimer;
+  int offset = 0;
+
+  final Map<String, (AnimationController, Animation<double>)> _animations = {};
 
   @override
   void initState() {
     super.initState();
 
-    editorState = _parseMarkdown(widget.markdown);
+    editorState = _parseMarkdown(widget.markdown.trim());
     scrollController = EditorScrollController(
       editorState: editorState,
       shrinkWrap: true,
     );
+
+    if (widget.withAnimation) {
+      markdownOutputTimer =
+          Timer.periodic(const Duration(milliseconds: 60), (timer) {
+        if (offset >= widget.markdown.length || !widget.withAnimation) {
+          return;
+        }
+
+        final markdown = widget.markdown.substring(0, offset);
+        offset += 30;
+
+        final editorState = _parseMarkdown(
+          markdown,
+          previousDocument: this.editorState.document,
+        );
+        final lastCurrentNode = editorState.document.last;
+        final lastPreviousNode = this.editorState.document.last;
+        if (lastCurrentNode?.id != lastPreviousNode?.id ||
+            lastCurrentNode?.type != lastPreviousNode?.type ||
+            lastCurrentNode?.delta?.toPlainText() !=
+                lastPreviousNode?.delta?.toPlainText()) {
+          setState(() {
+            this.editorState.dispose();
+            this.editorState = editorState;
+            scrollController.dispose();
+            scrollController = EditorScrollController(
+              editorState: editorState,
+              shrinkWrap: true,
+            );
+          });
+        }
+      });
+    }
   }
 
   @override
   void didUpdateWidget(covariant _AppFlowyEditorMarkdown oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.markdown != widget.markdown) {
-      editorState.dispose();
-      editorState = _parseMarkdown(widget.markdown);
+    if (oldWidget.markdown != widget.markdown && !widget.withAnimation) {
+      final editorState = _parseMarkdown(
+        widget.markdown.trim(),
+        previousDocument: this.editorState.document,
+      );
+      this.editorState.dispose();
+      this.editorState = editorState;
       scrollController.dispose();
       scrollController = EditorScrollController(
         editorState: editorState,
@@ -92,14 +132,21 @@ class _AppFlowyEditorMarkdownState extends State<_AppFlowyEditorMarkdown> {
     scrollController.dispose();
     editorState.dispose();
 
+    if (widget.withAnimation) {
+      markdownOutputTimer.cancel();
+      for (final controller in _animations.values.map((e) => e.$1)) {
+        controller.dispose();
+      }
+    }
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     // don't lazy load the styleCustomizer and blockBuilders,
-    //  it needs the context to get the theme.
-    final styleCustomizer = EditorStyleCustomizer(
+    // it needs the context to get the theme.
+    final styleCustomizer = ChatEditorStyleCustomizer(
       context: context,
       padding: EdgeInsets.zero,
     );
@@ -108,275 +155,132 @@ class _AppFlowyEditorMarkdownState extends State<_AppFlowyEditorMarkdown> {
           cursorColor: Colors.transparent,
           cursorWidth: 0,
         );
-    final blockBuilders = getEditorBuilderMap(
+    final blockBuilders = buildBlockComponentBuilders(
       context: context,
       editorState: editorState,
       styleCustomizer: styleCustomizer,
       // the editor is not editable in the chat
       editable: false,
+      alwaysDistributeSimpleTableColumnWidths: UniversalPlatform.isDesktop,
+      customPadding: (node) => EdgeInsets.zero,
     );
     return IntrinsicHeight(
       child: AppFlowyEditor(
         shrinkWrap: true,
         // the editor is not editable in the chat
         editable: false,
+        disableKeyboardService: UniversalPlatform.isMobile,
+        disableSelectionService: UniversalPlatform.isMobile,
         editorStyle: editorStyle,
         editorScrollController: scrollController,
         blockComponentBuilders: blockBuilders,
         commandShortcutEvents: [customCopyCommand],
+        disableAutoScroll: true,
         editorState: editorState,
+        blockWrapper: (
+          context, {
+          required Node node,
+          required Widget child,
+        }) {
+          if (!widget.withAnimation) {
+            return child;
+          }
+
+          if (!_animations.containsKey(node.id)) {
+            final duration = UniversalPlatform.isMobile
+                ? const Duration(milliseconds: 800)
+                : const Duration(milliseconds: 1600);
+            final controller = AnimationController(
+              vsync: this,
+              duration: duration,
+            );
+            final fade = Tween<double>(
+              begin: 0,
+              end: 1,
+            ).animate(controller);
+            _animations[node.id] = (controller, fade);
+            controller.forward();
+          }
+          final (controller, fade) = _animations[node.id]!;
+          return _AnimatedWrapper(
+            fade: fade,
+            child: child,
+          );
+        },
+        contextMenuItems: [
+          [
+            ContextMenuItem(
+              getName: LocaleKeys.document_plugins_contextMenu_copy.tr,
+              onPressed: (editorState) =>
+                  customCopyCommand.execute(editorState),
+            ),
+          ]
+        ],
       ),
     );
   }
 
-  EditorState _parseMarkdown(String markdown) {
+  EditorState _parseMarkdown(
+    String markdown, {
+    Document? previousDocument,
+  }) {
+    // merge the nodes from the previous document with the new document to keep the same node ids
     final document = customMarkdownToDocument(markdown);
+    final documentIterator = NodeIterator(
+      document: document,
+      startNode: document.root,
+    );
+    if (previousDocument != null) {
+      final previousDocumentIterator = NodeIterator(
+        document: previousDocument,
+        startNode: previousDocument.root,
+      );
+      while (
+          documentIterator.moveNext() && previousDocumentIterator.moveNext()) {
+        final currentNode = documentIterator.current;
+        final previousNode = previousDocumentIterator.current;
+        if (currentNode.path.equals(previousNode.path)) {
+          currentNode.id = previousNode.id;
+        }
+      }
+    }
     final editorState = EditorState(document: document);
     return editorState;
   }
 }
 
-class _ThirdPartyMarkdown extends StatelessWidget {
-  const _ThirdPartyMarkdown({
-    required this.markdown,
+class _AnimatedWrapper extends StatelessWidget {
+  const _AnimatedWrapper({
+    required this.fade,
+    required this.child,
   });
 
-  final String markdown;
+  final Animation<double> fade;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return MarkdownWidget(
-      data: markdown,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      config: configFromContext(context),
-    );
-  }
-
-  MarkdownConfig configFromContext(BuildContext context) {
-    return MarkdownConfig(
-      configs: [
-        HrConfig(color: AFThemeExtension.of(context).textColor),
-        _ChatH1Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-          dividerColor: AFThemeExtension.of(context).lightGreyHover,
-        ),
-        _ChatH2Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-          dividerColor: AFThemeExtension.of(context).lightGreyHover,
-        ),
-        _ChatH3Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-          dividerColor: AFThemeExtension.of(context).lightGreyHover,
-        ),
-        H4Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-        ),
-        H5Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-        ),
-        H6Config(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            height: 1.5,
-          ),
-        ),
-        PreConfig(
-          builder: (code, language) {
-            return ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: 800,
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.all(Radius.circular(6.0)),
-                child: SelectableHighlightView(
-                  code,
-                  language: language,
-                  theme: getHighlightTheme(context),
-                  padding: const EdgeInsets.all(14),
-                  textStyle: TextStyle(
-                    color: AFThemeExtension.of(context).textColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    height: 1.5,
-                  ),
-                ),
-              ),
-            );
+    return AnimatedBuilder(
+      animation: fade,
+      builder: (context, childWidget) {
+        return ShaderMask(
+          shaderCallback: (Rect bounds) {
+            return LinearGradient(
+              stops: [fade.value, fade.value],
+              colors: const [
+                Colors.white,
+                Colors.transparent,
+              ],
+            ).createShader(bounds);
           },
-        ),
-        PConfig(
-          textStyle: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            height: 1.5,
+          blendMode: BlendMode.dstIn,
+          child: Opacity(
+            opacity: fade.value,
+            child: childWidget,
           ),
-        ),
-        CodeConfig(
-          style: TextStyle(
-            color: AFThemeExtension.of(context).textColor,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-            height: 1.5,
-          ),
-        ),
-        BlockquoteConfig(
-          sideColor: AFThemeExtension.of(context).lightGreyHover,
-          textColor: AFThemeExtension.of(context).textColor,
-        ),
-      ],
+        );
+      },
+      child: child,
     );
   }
-
-  Map<String, TextStyle> getHighlightTheme(BuildContext context) {
-    return {
-      'root': TextStyle(
-        color: const Color(0xffabb2bf),
-        backgroundColor:
-            Theme.of(context).isLightMode ? Colors.white : Colors.black38,
-      ),
-      'comment': const TextStyle(
-        color: Color(0xff5c6370),
-        fontStyle: FontStyle.italic,
-      ),
-      'quote': const TextStyle(
-        color: Color(0xff5c6370),
-        fontStyle: FontStyle.italic,
-      ),
-      'doctag': const TextStyle(color: Color(0xffc678dd)),
-      'keyword': const TextStyle(color: Color(0xffc678dd)),
-      'formula': const TextStyle(color: Color(0xffc678dd)),
-      'section': const TextStyle(color: Color(0xffe06c75)),
-      'name': const TextStyle(color: Color(0xffe06c75)),
-      'selector-tag': const TextStyle(color: Color(0xffe06c75)),
-      'deletion': const TextStyle(color: Color(0xffe06c75)),
-      'subst': const TextStyle(color: Color(0xffe06c75)),
-      'literal': const TextStyle(color: Color(0xff56b6c2)),
-      'string': const TextStyle(color: Color(0xff98c379)),
-      'regexp': const TextStyle(color: Color(0xff98c379)),
-      'addition': const TextStyle(color: Color(0xff98c379)),
-      'attribute': const TextStyle(color: Color(0xff98c379)),
-      'meta-string': const TextStyle(color: Color(0xff98c379)),
-      'built_in': const TextStyle(color: Color(0xffe6c07b)),
-      'attr': const TextStyle(color: Color(0xffd19a66)),
-      'variable': const TextStyle(color: Color(0xffd19a66)),
-      'template-variable': const TextStyle(color: Color(0xffd19a66)),
-      'type': const TextStyle(color: Color(0xffd19a66)),
-      'selector-class': const TextStyle(color: Color(0xffd19a66)),
-      'selector-attr': const TextStyle(color: Color(0xffd19a66)),
-      'selector-pseudo': const TextStyle(color: Color(0xffd19a66)),
-      'number': const TextStyle(color: Color(0xffd19a66)),
-      'symbol': const TextStyle(color: Color(0xff61aeee)),
-      'bullet': const TextStyle(color: Color(0xff61aeee)),
-      'link': const TextStyle(color: Color(0xff61aeee)),
-      'meta': const TextStyle(color: Color(0xff61aeee)),
-      'selector-id': const TextStyle(color: Color(0xff61aeee)),
-      'title': const TextStyle(color: Color(0xff61aeee)),
-      'emphasis': const TextStyle(fontStyle: FontStyle.italic),
-      'strong': const TextStyle(fontWeight: FontWeight.bold),
-    };
-  }
-}
-
-class _ChatH1Config extends HeadingConfig {
-  const _ChatH1Config({
-    this.style = const TextStyle(
-      fontSize: 32,
-      height: 40 / 32,
-      fontWeight: FontWeight.bold,
-    ),
-    required this.dividerColor,
-  });
-
-  @override
-  final TextStyle style;
-  final Color dividerColor;
-
-  @override
-  String get tag => MarkdownTag.h1.name;
-
-  @override
-  HeadingDivider? get divider => HeadingDivider(
-        space: 10,
-        color: dividerColor,
-        height: 10,
-      );
-}
-
-///config class for h2
-class _ChatH2Config extends HeadingConfig {
-  const _ChatH2Config({
-    this.style = const TextStyle(
-      fontSize: 24,
-      height: 30 / 24,
-      fontWeight: FontWeight.bold,
-    ),
-    required this.dividerColor,
-  });
-  @override
-  final TextStyle style;
-  final Color dividerColor;
-
-  @override
-  String get tag => MarkdownTag.h2.name;
-
-  @override
-  HeadingDivider? get divider => HeadingDivider(
-        space: 10,
-        color: dividerColor,
-        height: 10,
-      );
-}
-
-class _ChatH3Config extends HeadingConfig {
-  const _ChatH3Config({
-    this.style = const TextStyle(
-      fontSize: 24,
-      height: 30 / 24,
-      fontWeight: FontWeight.bold,
-    ),
-    required this.dividerColor,
-  });
-
-  @override
-  final TextStyle style;
-  final Color dividerColor;
-
-  @override
-  String get tag => MarkdownTag.h3.name;
-
-  @override
-  HeadingDivider? get divider => HeadingDivider(
-        space: 10,
-        color: dividerColor,
-        height: 10,
-      );
 }

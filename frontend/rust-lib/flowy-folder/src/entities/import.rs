@@ -1,16 +1,20 @@
-use crate::entities::parser::empty_str::NotEmptyStr;
 use crate::entities::ViewLayoutPB;
-use crate::share::{ImportParams, ImportType, ImportValue};
-use collab_entity::CollabType;
+use crate::entities::parser::empty_str::NotEmptyStr;
+use crate::share::{ImportData, ImportItem, ImportParams, ImportType};
 use flowy_derive::{ProtoBuf, ProtoBuf_Enum};
 use flowy_error::FlowyError;
+use lib_infra::validator_fn::required_not_empty_str;
+use std::str::FromStr;
+use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Clone, Debug, ProtoBuf_Enum)]
 pub enum ImportTypePB {
   HistoryDocument = 0,
   HistoryDatabase = 1,
-  RawDatabase = 2,
-  CSV = 3,
+  Markdown = 2,
+  AFDatabase = 3,
+  CSV = 4,
 }
 
 impl From<ImportTypePB> for ImportType {
@@ -18,31 +22,21 @@ impl From<ImportTypePB> for ImportType {
     match pb {
       ImportTypePB::HistoryDocument => ImportType::HistoryDocument,
       ImportTypePB::HistoryDatabase => ImportType::HistoryDatabase,
-      ImportTypePB::RawDatabase => ImportType::RawDatabase,
+      ImportTypePB::Markdown => ImportType::Markdown,
+      ImportTypePB::AFDatabase => ImportType::AFDatabase,
       ImportTypePB::CSV => ImportType::CSV,
-    }
-  }
-}
-
-impl From<ImportType> for CollabType {
-  fn from(import_type: ImportType) -> Self {
-    match import_type {
-      ImportType::HistoryDocument => CollabType::Document,
-      ImportType::HistoryDatabase => CollabType::Database,
-      ImportType::RawDatabase => CollabType::Database,
-      ImportType::CSV => CollabType::Database,
     }
   }
 }
 
 impl Default for ImportTypePB {
   fn default() -> Self {
-    Self::HistoryDocument
+    Self::Markdown
   }
 }
 
 #[derive(Clone, Debug, ProtoBuf, Default)]
-pub struct ImportValuePayloadPB {
+pub struct ImportItemPayloadPB {
   // the name of the import page
   #[pb(index = 1)]
   pub name: String,
@@ -66,16 +60,14 @@ pub struct ImportValuePayloadPB {
   pub import_type: ImportTypePB,
 }
 
-#[derive(Clone, Debug, ProtoBuf, Default)]
+#[derive(Clone, Debug, Validate, ProtoBuf, Default)]
 pub struct ImportPayloadPB {
   #[pb(index = 1)]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub parent_view_id: String,
 
   #[pb(index = 2)]
-  pub values: Vec<ImportValuePayloadPB>,
-
-  #[pb(index = 3)]
-  pub sync_after_create: bool,
+  pub items: Vec<ImportItemPayloadPB>,
 }
 
 impl TryInto<ImportParams> for ImportPayloadPB {
@@ -86,39 +78,48 @@ impl TryInto<ImportParams> for ImportPayloadPB {
       .map_err(|_| FlowyError::invalid_view_id())?
       .0;
 
-    let mut values = Vec::new();
+    let parent_view_id = Uuid::from_str(&parent_view_id)?;
 
-    for value in self.values {
-      let name = if value.name.is_empty() {
-        "Untitled".to_string()
-      } else {
-        value.name
-      };
+    let items = self
+      .items
+      .into_iter()
+      .map(|item| {
+        let name = if item.name.is_empty() {
+          "Untitled".to_string()
+        } else {
+          item.name
+        };
 
-      let file_path = match value.file_path {
-        None => None,
-        Some(file_path) => Some(
-          NotEmptyStr::parse(file_path)
-            .map_err(|_| FlowyError::invalid_data().with_context("The import file path is empty"))?
-            .0,
-        ),
-      };
+        let data = match (item.file_path, item.data) {
+          (Some(file_path), None) => ImportData::FilePath { file_path },
+          (None, Some(bytes)) => ImportData::Bytes { bytes },
+          (None, None) => {
+            return Err(FlowyError::invalid_data().with_context("The import data is empty"));
+          },
+          (Some(_), Some(_)) => {
+            return Err(FlowyError::invalid_data().with_context("The import data is ambiguous"));
+          },
+        };
 
-      let params = ImportValue {
-        name,
-        data: value.data,
-        file_path,
-        view_layout: value.view_layout.into(),
-        import_type: value.import_type.into(),
-      };
-
-      values.push(params);
-    }
+        Ok(ImportItem {
+          name,
+          data,
+          view_layout: item.view_layout.into(),
+          import_type: item.import_type.into(),
+        })
+      })
+      .collect::<Result<Vec<_>, _>>()?;
 
     Ok(ImportParams {
       parent_view_id,
-      values,
-      sync_after_create: self.sync_after_create,
+      items,
     })
   }
+}
+
+#[derive(Clone, Debug, Validate, ProtoBuf, Default)]
+pub struct ImportZipPB {
+  #[pb(index = 1)]
+  #[validate(custom(function = "required_not_empty_str"))]
+  pub file_path: String,
 }

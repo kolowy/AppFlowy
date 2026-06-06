@@ -1,9 +1,17 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy/shared/icon_emoji_picker/flowy_icon_emoji_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/icon_picker.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
+import 'package:appflowy/workspace/presentation/home/menu/sidebar/space/space_icon.dart';
+import 'package:appflowy_backend/log.dart';
+import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Icon;
 
 final builtInSpaceColors = [
   '0xFFA34AFD',
@@ -20,6 +28,11 @@ final builtInSpaceColors = [
   '0xFFFF8933',
 ];
 
+String generateRandomSpaceColor() {
+  final random = Random();
+  return builtInSpaceColors[random.nextInt(builtInSpaceColors.length)];
+}
+
 final builtInSpaceIcons =
     List.generate(15, (index) => 'space_icon_${index + 1}');
 
@@ -29,12 +42,14 @@ class SpaceIconPopup extends StatefulWidget {
     this.icon,
     this.iconColor,
     this.cornerRadius = 16,
+    this.space,
     required this.onIconChanged,
   });
 
   final String? icon;
   final String? iconColor;
-  final void Function(String icon, String color) onIconChanged;
+  final ViewPB? space;
+  final void Function(String? icon, String? color) onIconChanged;
   final double cornerRadius;
 
   @override
@@ -42,10 +57,12 @@ class SpaceIconPopup extends StatefulWidget {
 }
 
 class _SpaceIconPopupState extends State<SpaceIconPopup> {
-  late ValueNotifier<String> selectedColor =
-      ValueNotifier<String>(widget.iconColor ?? builtInSpaceColors.first);
-  late ValueNotifier<String> selectedIcon =
-      ValueNotifier<String>(widget.icon ?? builtInSpaceIcons.first);
+  late ValueNotifier<String?> selectedIcon = ValueNotifier<String?>(
+    widget.icon,
+  );
+  late ValueNotifier<String> selectedColor = ValueNotifier<String>(
+    widget.iconColor ?? builtInSpaceColors.first,
+  );
 
   @override
   void dispose() {
@@ -58,19 +75,34 @@ class _SpaceIconPopupState extends State<SpaceIconPopup> {
   Widget build(BuildContext context) {
     return AppFlowyPopover(
       offset: const Offset(0, 4),
-      constraints: const BoxConstraints(maxWidth: 220),
-      margin: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
+      constraints: BoxConstraints.loose(const Size(360, 432)),
+      margin: const EdgeInsets.all(0),
       direction: PopoverDirection.bottomWithCenterAligned,
       child: _buildPreview(),
-      popupBuilder: (_) => SpaceIconPicker(
-        icon: selectedIcon.value,
-        iconColor: selectedColor.value,
-        onIconChanged: (icon, iconColor) {
-          selectedIcon.value = icon;
-          selectedColor.value = iconColor;
-          widget.onIconChanged(icon, iconColor);
-        },
-      ),
+      popupBuilder: (context) {
+        return FlowyIconEmojiPicker(
+          tabs: const [PickerTabType.icon],
+          onSelectedEmoji: (r) {
+            if (r.type == FlowyIconType.icon) {
+              try {
+                final iconsData = IconsData.fromJson(jsonDecode(r.emoji));
+                final color = iconsData.color;
+                selectedIcon.value =
+                    '${iconsData.groupName}/${iconsData.iconName}';
+                if (color != null) {
+                  selectedColor.value = color;
+                }
+                widget.onIconChanged(selectedIcon.value, selectedColor.value);
+              } on FormatException catch (e) {
+                selectedIcon.value = '';
+                widget.onIconChanged(selectedIcon.value, selectedColor.value);
+                Log.warn('SpaceIconPopup onSelectedEmoji error:$e');
+              }
+            }
+            PopoverContainer.of(context).close();
+          },
+        );
+      },
     );
   }
 
@@ -87,15 +119,59 @@ class _SpaceIconPopupState extends State<SpaceIconPopup> {
             builder: (_, color, __) {
               return ValueListenableBuilder(
                 valueListenable: selectedIcon,
-                builder: (_, icon, __) {
-                  final child = ClipRRect(
-                    borderRadius: BorderRadius.circular(widget.cornerRadius),
-                    child: FlowySvg(
-                      FlowySvgData('assets/flowy_icons/16x/$icon.svg'),
-                      color: Color(int.parse(color)),
-                      blendMode: BlendMode.srcOut,
-                    ),
-                  );
+                builder: (_, value, __) {
+                  Widget child;
+                  if (value == null) {
+                    if (widget.space == null) {
+                      child = DefaultSpaceIcon(
+                        cornerRadius: widget.cornerRadius,
+                        dimension: 32,
+                        iconDimension: 32,
+                      );
+                    } else {
+                      child = SpaceIcon(
+                        dimension: 32,
+                        space: widget.space!,
+                        svgSize: 24,
+                        cornerRadius: widget.cornerRadius,
+                      );
+                    }
+                  } else if (value.contains('space_icon')) {
+                    child = ClipRRect(
+                      borderRadius: BorderRadius.circular(widget.cornerRadius),
+                      child: Container(
+                        color: Color(int.parse(color)),
+                        child: Align(
+                          child: FlowySvg(
+                            FlowySvgData('assets/flowy_icons/16x/$value.svg'),
+                            size: const Size.square(42),
+                            color: Theme.of(context).colorScheme.surface,
+                          ),
+                        ),
+                      ),
+                    );
+                  } else {
+                    final content = kIconGroups?.findSvgContent(value);
+                    if (content == null) {
+                      child = const SizedBox.shrink();
+                    } else {
+                      child = ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(widget.cornerRadius),
+                        child: Container(
+                          color: Color(int.parse(color)),
+                          child: Align(
+                            child: FlowySvg.string(
+                              content,
+                              size: const Size.square(24),
+                              color: Theme.of(context).colorScheme.surface,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                  }
+
                   if (onHover) {
                     return Stack(
                       children: [
@@ -154,18 +230,24 @@ class _SpaceIconPickerState extends State<SpaceIconPicker> {
       widget.onIconChanged(selectedIcon.value, selectedColor.value);
     }
 
-    selectedColor.addListener(() {
-      widget.onIconChanged(selectedIcon.value, selectedColor.value);
-    });
+    selectedColor.addListener(_onColorChanged);
+    selectedIcon.addListener(_onIconChanged);
+  }
 
-    selectedIcon.addListener(() {
-      widget.onIconChanged(selectedIcon.value, selectedColor.value);
-    });
+  void _onColorChanged() {
+    widget.onIconChanged(selectedIcon.value, selectedColor.value);
+  }
+
+  void _onIconChanged() {
+    widget.onIconChanged(selectedIcon.value, selectedColor.value);
   }
 
   @override
   void dispose() {
+    selectedColor.removeListener(_onColorChanged);
     selectedColor.dispose();
+
+    selectedIcon.removeListener(_onIconChanged);
     selectedIcon.dispose();
     super.dispose();
   }
@@ -183,9 +265,7 @@ class _SpaceIconPickerState extends State<SpaceIconPicker> {
         const VSpace(10.0),
         _Colors(
           selectedColor: selectedColor.value,
-          onColorSelected: (color) {
-            selectedColor.value = color;
-          },
+          onColorSelected: (color) => selectedColor.value = color,
         ),
         const VSpace(12.0),
         FlowyText.regular(
@@ -198,9 +278,7 @@ class _SpaceIconPickerState extends State<SpaceIconPicker> {
           builder: (_, value, ___) => _Icons(
             selectedColor: value,
             selectedIcon: selectedIcon.value,
-            onIconSelected: (icon) {
-              selectedIcon.value = icon;
-            },
+            onIconSelected: (icon) => selectedIcon.value = icon,
           ),
         ),
       ],
@@ -233,9 +311,7 @@ class _ColorsState extends State<_Colors> {
       children: builtInSpaceColors.map((color) {
         return GestureDetector(
           onTap: () {
-            setState(() {
-              selectedColor = color;
-            });
+            setState(() => selectedColor = color);
 
             widget.onColorSelected(color);
           },
@@ -295,9 +371,7 @@ class _IconsState extends State<_Icons> {
       children: builtInSpaceIcons.map((icon) {
         return GestureDetector(
           onTap: () {
-            setState(() {
-              selectedIcon = icon;
-            });
+            setState(() => selectedIcon = icon);
 
             widget.onIconSelected(icon);
           },

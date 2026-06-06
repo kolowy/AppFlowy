@@ -1,8 +1,6 @@
 use collab::entity::EncodedCollab;
 use std::collections::HashMap;
 
-use serde_json::Value;
-
 use flowy_document::entities::*;
 use flowy_document::event_map::DocumentEvent;
 use flowy_document::parser::parser_entities::{
@@ -11,6 +9,8 @@ use flowy_document::parser::parser_entities::{
 };
 use flowy_folder::entities::{CreateViewPayloadPB, ViewLayoutPB, ViewPB};
 use flowy_folder::event_map::FolderEvent;
+use serde_json::Value;
+use uuid::Uuid;
 
 use crate::document::utils::{gen_delta_str, gen_id, gen_text_block_data};
 use crate::event_builder::EventBuilder;
@@ -37,15 +37,15 @@ impl DocumentEventTest {
     Self { event_test: core }
   }
 
-  pub async fn get_encoded_v1(&self, doc_id: &str) -> EncodedCollab {
+  pub async fn get_encoded_v1(&self, doc_id: &Uuid) -> EncodedCollab {
     let doc = self
       .event_test
       .appflowy_core
       .document_manager
-      .get_document(doc_id)
+      .editable_document(doc_id)
       .await
       .unwrap();
-    let guard = doc.lock();
+    let guard = doc.read().await;
     guard.encode_collab().unwrap()
   }
 
@@ -59,7 +59,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<EncodedCollabPB>()
+      .parse_or_panic::<EncodedCollabPB>()
   }
 
   pub async fn create_document(&self) -> ViewPB {
@@ -70,7 +70,6 @@ impl DocumentEventTest {
     let payload = CreateViewPayloadPB {
       parent_view_id: parent_id.to_string(),
       name: "document".to_string(),
-      desc: "".to_string(),
       thumbnail: None,
       layout: ViewLayoutPB::Document,
       initial_data: vec![],
@@ -86,7 +85,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ViewPB>()
+      .parse_or_panic::<ViewPB>()
   }
 
   pub async fn open_document(&self, doc_id: String) -> OpenDocumentData {
@@ -146,7 +145,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ConvertDocumentResponsePB>()
+      .parse_or_panic::<ConvertDocumentResponsePB>()
   }
 
   // convert data to json for document event test
@@ -160,7 +159,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<ConvertDataToJsonResponsePB>()
+      .parse_or_panic::<ConvertDataToJsonResponsePB>()
   }
 
   pub async fn create_text(&self, payload: TextDeltaPayloadPB) {
@@ -191,7 +190,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<DocumentRedoUndoResponsePB>()
+      .parse_or_panic::<DocumentRedoUndoResponsePB>()
   }
 
   pub async fn redo(&self, doc_id: String) -> DocumentRedoUndoResponsePB {
@@ -204,7 +203,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<DocumentRedoUndoResponsePB>()
+      .parse_or_panic::<DocumentRedoUndoResponsePB>()
   }
 
   pub async fn can_undo_redo(&self, doc_id: String) -> DocumentRedoUndoResponsePB {
@@ -217,7 +216,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<DocumentRedoUndoResponsePB>()
+      .parse_or_panic::<DocumentRedoUndoResponsePB>()
   }
 
   pub async fn apply_delta_for_block(&self, document_id: &str, block_id: &str, delta: String) {
@@ -243,7 +242,7 @@ impl DocumentEventTest {
       .payload(payload)
       .async_send()
       .await
-      .parse::<RepeatedDocumentSnapshotMetaPB>()
+      .parse_or_panic::<RepeatedDocumentSnapshotMetaPB>()
       .items
   }
 
@@ -257,7 +256,7 @@ impl DocumentEventTest {
       .payload(snapshot_meta)
       .async_send()
       .await
-      .parse::<DocumentSnapshotPB>()
+      .parse_or_panic::<DocumentSnapshotPB>()
   }
 
   /// Insert a new text block at the index of parent's children.

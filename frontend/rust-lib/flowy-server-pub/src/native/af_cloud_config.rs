@@ -7,12 +7,17 @@ use flowy_error::{ErrorCode, FlowyError};
 pub const APPFLOWY_CLOUD_BASE_URL: &str = "APPFLOWY_CLOUD_ENV_APPFLOWY_CLOUD_BASE_URL";
 pub const APPFLOWY_CLOUD_WS_BASE_URL: &str = "APPFLOWY_CLOUD_ENV_APPFLOWY_CLOUD_WS_BASE_URL";
 pub const APPFLOWY_CLOUD_GOTRUE_URL: &str = "APPFLOWY_CLOUD_ENV_APPFLOWY_CLOUD_GOTRUE_URL";
+pub const APPFLOWY_ENABLE_SYNC_TRACE: &str = "APPFLOWY_ENABLE_SYNC_TRACE";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AFCloudConfiguration {
   pub base_url: String,
   pub ws_base_url: String,
   pub gotrue_url: String,
+  #[serde(default)]
+  pub enable_sync_trace: bool,
+  #[serde(default)]
+  pub maximum_upload_file_size_in_bytes: Option<u64>,
 }
 
 impl Display for AFCloudConfiguration {
@@ -53,17 +58,33 @@ impl AFCloudConfiguration {
       );
     }
 
+    let enable_sync_trace = std::env::var(APPFLOWY_ENABLE_SYNC_TRACE)
+      .map(|v| v == "true" || v == "1")
+      .unwrap_or(true);
+
     Ok(Self {
       base_url,
       ws_base_url,
       gotrue_url,
+      enable_sync_trace,
+      maximum_upload_file_size_in_bytes: None,
     })
   }
 
   /// Write the configuration to the environment variables.
   pub fn write_env(&self) {
-    std::env::set_var(APPFLOWY_CLOUD_BASE_URL, &self.base_url);
-    std::env::set_var(APPFLOWY_CLOUD_WS_BASE_URL, &self.ws_base_url);
-    std::env::set_var(APPFLOWY_CLOUD_GOTRUE_URL, &self.gotrue_url);
+    unsafe {
+      std::env::set_var(APPFLOWY_CLOUD_BASE_URL, &self.base_url);
+      std::env::set_var(APPFLOWY_CLOUD_WS_BASE_URL, &self.ws_base_url);
+      std::env::set_var(APPFLOWY_CLOUD_GOTRUE_URL, &self.gotrue_url);
+      std::env::set_var(
+        APPFLOWY_ENABLE_SYNC_TRACE,
+        if self.enable_sync_trace {
+          "true"
+        } else {
+          "false"
+        },
+      );
+    }
   }
 }

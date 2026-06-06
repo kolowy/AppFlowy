@@ -4,8 +4,8 @@ use lib_infra::validator_fn::required_not_empty_str;
 use std::ops::Deref;
 use validator::Validate;
 
-use crate::entities::parser::NotEmptyStr;
 use crate::entities::RepeatedFieldIdPB;
+use crate::entities::parser::NotEmptyStr;
 use crate::impl_into_field_visibility;
 use crate::services::field_settings::FieldSettings;
 
@@ -101,11 +101,11 @@ impl std::convert::From<Vec<FieldSettingsPB>> for RepeatedFieldSettingsPB {
 
 #[derive(Debug, Default, Clone, ProtoBuf, Validate)]
 pub struct FieldSettingsChangesetPB {
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   #[pb(index = 1)]
   pub view_id: String,
 
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   #[pb(index = 2)]
   pub field_id: String,
 

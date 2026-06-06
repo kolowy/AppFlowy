@@ -1,16 +1,17 @@
-import 'package:flutter/material.dart';
-
+import 'package:appflowy/features/share_tab/data/models/models.dart';
+import 'package:appflowy/features/share_tab/logic/share_tab_bloc.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/database/application/tab_bar_bloc.dart';
 import 'package:appflowy/plugins/shared/share/share_bloc.dart';
 import 'package:appflowy/plugins/shared/share/share_menu.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:appflowy_ui/appflowy_ui.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flowy_infra_ui/flowy_infra_ui.dart';
-import 'package:flowy_infra_ui/widget/rounded_button.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:provider/provider.dart';
 
-class ShareMenuButton extends StatelessWidget {
+class ShareMenuButton extends StatefulWidget {
   const ShareMenuButton({
     super.key,
     required this.tabs,
@@ -19,51 +20,101 @@ class ShareMenuButton extends StatelessWidget {
   final List<ShareMenuTab> tabs;
 
   @override
-  Widget build(BuildContext context) {
-    final shareBloc = context.read<ShareBloc>();
-    final databaseBloc = context.read<DatabaseTabBarBloc?>();
-    return SizedBox(
-      height: 32.0,
-      child: IntrinsicWidth(
-        child: AppFlowyPopover(
-          direction: PopoverDirection.bottomWithRightAligned,
-          constraints: const BoxConstraints(
-            maxWidth: 422,
-          ),
-          offset: const Offset(0, 8),
-          popupBuilder: (context) => MultiBlocProvider(
-            providers: [
-              if (databaseBloc != null)
-                BlocProvider.value(
-                  value: databaseBloc,
-                ),
-              BlocProvider.value(value: shareBloc),
-            ],
-            child: ShareMenu(
-              tabs: tabs,
-            ),
-          ),
-          child: const _ShareButton(),
-        ),
-      ),
-    );
-  }
+  State<ShareMenuButton> createState() => _ShareMenuButtonState();
 }
 
-class _ShareButton extends StatelessWidget {
-  const _ShareButton();
+class _ShareMenuButtonState extends State<ShareMenuButton> {
+  final popoverController = AFPopoverController();
+  final popoverGroupId = SharePopoverGroupId();
+
+  @override
+  void initState() {
+    super.initState();
+
+    popoverController.addListener(() {
+      if (context.mounted && popoverController.isOpen) {
+        context.read<ShareBloc>().add(const ShareEvent.updatePublishStatus());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    popoverController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return RoundedTextButton(
-      title: LocaleKeys.shareAction_buttonText.tr(),
-      padding: const EdgeInsets.symmetric(horizontal: 14.0),
-      fontSize: 14.0,
-      fontWeight: FontWeight.w500,
-      borderRadius: const BorderRadius.all(
-        Radius.circular(10.0),
-      ),
-      textColor: Theme.of(context).colorScheme.onPrimary,
+    final shareBloc = context.read<ShareBloc>();
+    final databaseBloc = context.read<DatabaseTabBarBloc?>();
+    final userWorkspaceBloc = context.read<UserWorkspaceBloc>();
+    final shareWithUserBloc = context.read<ShareTabBloc>();
+    // final animationDuration = const Duration(milliseconds: 120);
+
+    return BlocBuilder<ShareBloc, ShareState>(
+      builder: (context, state) {
+        return AFPopover(
+          controller: popoverController,
+          groupId: popoverGroupId,
+          anchor: AFAnchorAuto(
+            offset: const Offset(-176, 12),
+          ),
+          // Enable animation
+          // effects: [
+          //   FadeEffect(duration: animationDuration),
+          //   ScaleEffect(
+          //     duration: animationDuration,
+          //     begin: Offset(0.95, 0.95),
+          //     end: Offset(1, 1),
+          //     alignment: Alignment.topRight,
+          //   ),
+          //   MoveEffect(
+          //     duration: animationDuration,
+          //     begin: Offset(20, -20),
+          //     end: Offset(0, 0),
+          //     curve: Curves.easeOutQuad,
+          //   ),
+          // ],
+          popover: (_) {
+            return ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: 460,
+              ),
+              child: MultiBlocProvider(
+                providers: [
+                  if (databaseBloc != null)
+                    BlocProvider.value(
+                      value: databaseBloc,
+                    ),
+                  BlocProvider.value(value: shareBloc),
+                  BlocProvider.value(value: userWorkspaceBloc),
+                  BlocProvider.value(value: shareWithUserBloc),
+                ],
+                child: Provider.value(
+                  value: popoverGroupId,
+                  child: ShareMenu(
+                    tabs: widget.tabs,
+                    viewName: state.viewName,
+                    onClose: () {
+                      popoverController.hide();
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+          child: AFFilledTextButton.primary(
+            text: LocaleKeys.shareAction_buttonText.tr(),
+            onTap: () {
+              popoverController.show();
+
+              /// Fetch the shared users when the popover is shown
+              context.read<ShareTabBloc>().add(ShareTabEvent.loadSharedUsers());
+            },
+          ),
+        );
+      },
     );
   }
 }

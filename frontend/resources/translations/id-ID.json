@@ -9,6 +9,7 @@
   "title": "Judul",
   "youCanAlso": "Anda juga bisa",
   "and": "Dan",
+  "failedToOpenUrl": "Gagal membuka url: {}",
   "blockActions": {
     "addBelowTooltip": "Klik untuk menambahkan di bawah",
     "addAboveCmd": "Alt+klik",
@@ -41,11 +42,33 @@
     "emailHint": "Surat elektronik",
     "passwordHint": "Kata sandi",
     "dontHaveAnAccount": "Belum punya akun?",
+    "createAccount": "Membuat akun",
     "repeatPasswordEmptyError": "Sandi ulang tidak boleh kosong",
     "unmatchedPasswordError": "Kata sandi konfirmasi tidak sesuai dengan kata sandi awal",
     "syncPromptMessage": "Menyinkronkan data mungkin memerlukan waktu beberapa saat. Mohon jangan tutup halaman ini",
     "or": "ATAU",
+    "signInWithGoogle": "Lanjutkan dengan Google",
+    "signInWithGithub": "Lanjutkan dengan GitHub",
+    "signInWithDiscord": "Lanjutkan dengan Discord",
+    "signInWithApple": "Lanjutkan dengan Apple",
+    "continueAnotherWay": "Lanjutkan dengan cara lain",
+    "signUpWithGoogle": "Mendaftar dengan Google",
+    "signUpWithGithub": "Mendaftar dengan GitHub",
+    "signUpWithDiscord": "Mendaftar dengan Discord",
     "signInWith": "Masuk dengan:",
+    "signInWithEmail": "Lanjutkan dengan Email",
+    "signInWithMagicLink": "Lanjut",
+    "signUpWithMagicLink": "Mendaftar dengan Magic Link",
+    "pleaseInputYourEmail": "Masukkan alamat email Anda",
+    "settings": "Pengaturan",
+    "magicLinkSent": "Magic Link terkirim!",
+    "invalidEmail": "Masukkan alamat email yang valid",
+    "alreadyHaveAnAccount": "Sudah memiliki akun?",
+    "logIn": "Masuk",
+    "generalError": "Ada yang salah. Mohon coba kembali nanti",
+    "limitRateError": "Demi keamanan, Anda hanya dapat meminta magic link setiap 60 detik",
+    "magicLinkSentDescription": "Magic Link sudah terkirim ke email Anda. Klik pada tautan untuk menyelesaikan proses masuk Anda. Tautan akan kedaluwarsa setelah 5 menit.",
+    "anonymous": "Anonim",
     "LogInWithGoogle": "Masuk dengan Google",
     "LogInWithGithub": "Masuk dengan Github",
     "LogInWithDiscord": "Masuk dengan Discord",
@@ -137,14 +160,14 @@
   "questionBubble": {
     "shortcuts": "Pintasan",
     "whatsNew": "Apa yang baru?",
-    "help": "Bantuan & Dukungan",
     "markdown": "Penurunan harga",
     "debug": {
       "name": "Info debug",
       "success": "Info debug disalin ke papan klip!",
       "fail": "Tidak dapat menyalin info debug ke papan klip"
     },
-    "feedback": "Masukan"
+    "feedback": "Masukan",
+    "help": "Bantuan & Dukungan"
   },
   "menuAppHeader": {
     "moreButtonToolTip": "Menghapus, merubah nama, dan banyak lagi...",
@@ -183,13 +206,13 @@
     "addBlockBelow": "Tambahkan blok di bawah ini"
   },
   "sideBar": {
-    "closeSidebar": "Close sidebar",
-    "openSidebar": "Open sidebar",
+    "closeSidebar": "Tutup sidebar",
+    "openSidebar": "Buka sidebar",
     "personal": "Pribadi",
     "favorites": "Favorit",
-    "clickToHidePersonal": "Klik untuk menutup seksi pribadi",
-    "clickToHideFavorites": "Klik untuk menutup seksi favorit",
-    "addAPage": "Tambah sebuah page"
+    "clickToHidePersonal": "Klik untuk menutup Pribadi",
+    "clickToHideFavorites": "Klik untuk menutup Favorit",
+    "addAPage": "Tambah halaman baru"
   },
   "notifications": {
     "export": {
@@ -271,8 +294,7 @@
       "inputTextFieldHint": "Rahasia anda",
       "historicalUserList": "History masuk user",
       "historicalUserListTooltip": "Daftar ini menampilkan akun anonim Anda. Anda dapat mengeklik salah satu akun untuk melihat detailnya. Akun anonim dibuat dengan mengeklik tombol 'Memulai'",
-      "openHistoricalUser": "Klik untuk membuka akun anonim",
-      "supabaseSetting": "Pengaturan Supabase"
+      "openHistoricalUser": "Klik untuk membuka akun anonim"
     },
     "notifications": {
       "enableNotifications": {
@@ -283,28 +305,28 @@
     "appearance": {
       "resetSetting": "Mengatur ulang pengaturan ini",
       "fontFamily": {
-        "label": "Keluarga Fon",
-        "search": "Mencari"
+        "label": "Jenis Font",
+        "search": "Cari"
       },
       "themeMode": {
-        "label": "Theme Mode",
-        "light": "Mode Terang",
-        "dark": "Mode Gelap",
-        "system": "Adapt to System"
+        "label": "Tema",
+        "light": "Terang",
+        "dark": "Gelap",
+        "system": "Sesuai Sistem"
       },
       "layoutDirection": {
-        "label": "Arah Layout",
-        "hint": "Mengontrol aliran konten pada layar Anda, dari kiri ke kanan atau kanan ke kiri.",
-        "ltr": "LTR",
-        "rtl": "RTL"
+        "label": "Arah Tampilan",
+        "hint": "Mengatur arah tampilan konten, apakah dari kiri ke kanan atau kanan ke kiri.",
+        "ltr": "Kiri ke Kanan",
+        "rtl": "Kanan ke Kiri"
       },
       "textDirection": {
-        "label": "Arah teks default",
-        "hint": "Menentukan apakah teks harus dimulai dari kiri atau kanan sebagai default.",
-        "ltr": "LTR",
-        "rtl": "RTL",
-        "auto": "AUTO",
-        "fallback": "Sama seperti arah layout"
+        "label": "Arah Teks Bawaan",
+        "hint": "Atur arah teks bawaan, apakah dari kiri ke kanan atau kanan ke kiri.",
+        "ltr": "Kiri ke Kanan",
+        "rtl": "Kanan ke Kiri",
+        "auto": "Otomatis",
+        "fallback": "Sesuai Arah Tampilan"
       },
       "themeUpload": {
         "button": "Mengunggah",
@@ -377,8 +399,8 @@
       "tooltipSelectIcon": "Pilih ikon",
       "selectAnIcon": "Pilih ikon",
       "pleaseInputYourOpenAIKey": "silakan masukkan kunci AI Anda",
-      "pleaseInputYourStabilityAIKey": "Masukkan kunci Stability AI anda",
-      "clickToLogout": "Klik untuk keluar dari pengguna saat ini"
+      "clickToLogout": "Klik untuk keluar dari pengguna saat ini",
+      "pleaseInputYourStabilityAIKey": "Masukkan kunci Stability AI anda"
     },
     "mobile": {
       "personalInfo": "Informasi pribadi",
@@ -653,8 +675,8 @@
         "defaultColor": "Bawaan"
       },
       "image": {
-        "copiedToPasteBoard": "Tautan gambar telah disalin ke papan klip",
-        "addAnImage": "Tambah gambar"
+        "addAnImage": "Tambah gambar",
+        "copiedToPasteBoard": "Tautan gambar telah disalin ke papan klip"
       },
       "outline": {
         "addHeadingToCreateOutline": "Tambahkan judul untuk membuat daftar isi."

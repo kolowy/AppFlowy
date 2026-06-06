@@ -1,4 +1,5 @@
-import 'package:appflowy/generated/locale_keys.g.dart';
+import 'package:appflowy/features/shared_section/presentation/m_shared_section.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/mobile/application/mobile_router.dart';
 import 'package:appflowy/mobile/presentation/home/favorite_folder/favorite_space.dart';
 import 'package:appflowy/mobile/presentation/home/home_space/home_space.dart';
@@ -6,19 +7,25 @@ import 'package:appflowy/mobile/presentation/home/recent_folder/recent_space.dar
 import 'package:appflowy/mobile/presentation/home/tab/_tab_bar.dart';
 import 'package:appflowy/mobile/presentation/home/tab/space_order_bloc.dart';
 import 'package:appflowy/mobile/presentation/presentation.dart';
+import 'package:appflowy/mobile/presentation/setting/workspace/invite_members_screen.dart';
+import 'package:appflowy/shared/icon_emoji_picker/tab.dart';
 import 'package:appflowy/workspace/application/menu/sidebar_sections_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/folder/folder_bloc.dart';
 import 'package:appflowy/workspace/application/sidebar/space/space_bloc.dart';
+import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
-class MobileSpaceTab extends StatefulWidget {
-  const MobileSpaceTab({
+import 'ai_bubble_button.dart';
+
+final ValueNotifier<int> mobileCreateNewAIChatNotifier = ValueNotifier(0);
+
+class MobileHomePageTab extends StatefulWidget {
+  const MobileHomePageTab({
     super.key,
     required this.userProfile,
   });
@@ -26,10 +33,10 @@ class MobileSpaceTab extends StatefulWidget {
   final UserProfilePB userProfile;
 
   @override
-  State<MobileSpaceTab> createState() => _MobileSpaceTabState();
+  State<MobileHomePageTab> createState() => _MobileHomePageTabState();
 }
 
-class _MobileSpaceTabState extends State<MobileSpaceTab>
+class _MobileHomePageTabState extends State<MobileHomePageTab>
     with SingleTickerProviderStateMixin {
   TabController? tabController;
 
@@ -37,14 +44,19 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
   void initState() {
     super.initState();
 
-    mobileCreateNewPageNotifier.addListener(_createNewPage);
+    mobileCreateNewPageNotifier.addListener(_createNewDocument);
+    mobileCreateNewAIChatNotifier.addListener(_createNewAIChat);
+    mobileLeaveWorkspaceNotifier.addListener(_leaveWorkspace);
   }
 
   @override
   void dispose() {
     tabController?.removeListener(_onTabChange);
     tabController?.dispose();
-    mobileCreateNewPageNotifier.removeListener(_createNewPage);
+
+    mobileCreateNewPageNotifier.removeListener(_createNewDocument);
+    mobileCreateNewAIChatNotifier.removeListener(_createNewAIChat);
+    mobileLeaveWorkspaceNotifier.removeListener(_leaveWorkspace);
 
     super.dispose();
   }
@@ -61,7 +73,14 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
             listener: (context, state) {
               final lastCreatedPage = state.lastCreatedPage;
               if (lastCreatedPage != null) {
-                context.pushView(lastCreatedPage);
+                context.pushView(
+                  lastCreatedPage,
+                  tabs: [
+                    PickerTabType.emoji,
+                    PickerTabType.icon,
+                    PickerTabType.custom,
+                  ].map((e) => e.name).toList(),
+                );
               }
             },
           ),
@@ -71,7 +90,14 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
             listener: (context, state) {
               final lastCreatedPage = state.lastCreatedRootView;
               if (lastCreatedPage != null) {
-                context.pushView(lastCreatedPage);
+                context.pushView(
+                  lastCreatedPage,
+                  tabs: [
+                    PickerTabType.emoji,
+                    PickerTabType.icon,
+                    PickerTabType.custom,
+                  ].map((e) => e.name).toList(),
+                );
               }
             },
           ),
@@ -127,11 +153,9 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
     if (tabController == null) {
       return;
     }
-    context.read<SpaceOrderBloc>().add(
-          SpaceOrderEvent.open(
-            tabController!.index,
-          ),
-        );
+    context
+        .read<SpaceOrderBloc>()
+        .add(SpaceOrderEvent.open(tabController!.index));
   }
 
   List<Widget> _buildTabs(SpaceOrderState state) {
@@ -140,35 +164,71 @@ class _MobileSpaceTabState extends State<MobileSpaceTab>
         case MobileSpaceTabType.recent:
           return const MobileRecentSpace();
         case MobileSpaceTabType.spaces:
-          return MobileHomeSpace(userProfile: widget.userProfile);
+          final showAIFloatingButton =
+              widget.userProfile.workspaceType == WorkspaceTypePB.ServerW;
+          return Stack(
+            children: [
+              MobileHomeSpace(userProfile: widget.userProfile),
+              if (showAIFloatingButton)
+                Positioned(
+                  right: 20,
+                  bottom: MediaQuery.of(context).padding.bottom + 16,
+                  child: FloatingAIEntryV2(),
+                ),
+            ],
+          );
         case MobileSpaceTabType.favorites:
           return MobileFavoriteSpace(userProfile: widget.userProfile);
-        default:
-          throw Exception('Unknown tab type: $tab');
+        case MobileSpaceTabType.shared:
+          final workspaceId = context
+              .read<UserWorkspaceBloc>()
+              .state
+              .currentWorkspace
+              ?.workspaceId;
+          if (workspaceId == null) {
+            return const SizedBox.shrink();
+          }
+          return MSharedSection(
+            workspaceId: workspaceId,
+          );
       }
     }).toList();
   }
 
   // quick create new page when clicking the add button in navigation bar
-  void _createNewPage() {
+  void _createNewDocument() => _createNewPage(ViewLayoutPB.Document);
+
+  void _createNewAIChat() => _createNewPage(ViewLayoutPB.Chat);
+
+  void _createNewPage(ViewLayoutPB layout) {
     if (context.read<SpaceBloc>().state.spaces.isNotEmpty) {
       context.read<SpaceBloc>().add(
             SpaceEvent.createPage(
-              name: LocaleKeys.menuAppHeader_defaultNewPageName.tr(),
-              layout: ViewLayoutPB.Document,
+              name: '',
+              layout: layout,
+              openAfterCreate: true,
             ),
           );
-    } else {
+    } else if (layout == ViewLayoutPB.Document) {
+      // only support create document in section
       context.read<SidebarSectionsBloc>().add(
             SidebarSectionsEvent.createRootViewInSection(
-              name: LocaleKeys.menuAppHeader_defaultNewPageName.tr(),
+              name: '',
               index: 0,
               viewSection: FolderSpaceType.public.toViewSectionPB,
             ),
           );
-      context.read<FolderBloc>().add(
-            const FolderEvent.expandOrUnExpand(isExpanded: true),
-          );
     }
+  }
+
+  void _leaveWorkspace() {
+    final workspaceId =
+        context.read<UserWorkspaceBloc>().state.currentWorkspace?.workspaceId;
+    if (workspaceId == null) {
+      return Log.error('Workspace ID is null');
+    }
+    context
+        .read<UserWorkspaceBloc>()
+        .add(UserWorkspaceEvent.leaveWorkspace(workspaceId: workspaceId));
   }
 }

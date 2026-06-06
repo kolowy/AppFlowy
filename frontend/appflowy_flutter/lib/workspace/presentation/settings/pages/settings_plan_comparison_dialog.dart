@@ -1,6 +1,5 @@
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/generated/flowy_svgs.g.dart';
+import 'package:appflowy/shared/loading.dart';
 import 'package:appflowy/util/theme_extension.dart';
 import 'package:appflowy/workspace/application/settings/plan/settings_plan_bloc.dart';
 import 'package:appflowy/workspace/application/settings/plan/workspace_subscription_ext.dart';
@@ -11,11 +10,10 @@ import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/theme_extension.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
-import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../generated/locale_keys.g.dart';
-import '../../../../plugins/document/presentation/editor_plugins/openai/widgets/loading.dart';
 
 class SettingsPlanComparisonDialog extends StatefulWidget {
   const SettingsPlanComparisonDialog({
@@ -76,7 +74,7 @@ class _SettingsPlanComparisonDialogState
                 .settings_comparePlanDialog_paymentSuccess_description
                 .tr(args: [readyState.successfulPlanUpgrade!.label]),
             confirmLabel: LocaleKeys.button_close.tr(),
-            onConfirm: () {},
+            onConfirm: (_) {},
           );
         }
 
@@ -213,7 +211,7 @@ class _SettingsPlanComparisonDialogState
                                     .settings_comparePlanDialog_downgradeDialog_downgradeLabel
                                     .tr(),
                                 style: ConfirmPopupStyle.cancelAndOk,
-                                onConfirm: () =>
+                                onConfirm: (_) =>
                                     context.read<SettingsPlanBloc>().add(
                                           SettingsPlanEvent.cancelSubscription(
                                             reason: reason,
@@ -427,13 +425,13 @@ class _CurrentBadge extends StatelessWidget {
 
 class _ComparisonCell extends StatelessWidget {
   const _ComparisonCell({
-    required this.label,
+    this.label,
     this.icon,
     this.tooltip,
     this.isHighlighted = false,
   });
 
-  final String label;
+  final String? label;
   final FlowySvgData? icon;
   final String? tooltip;
   final bool isHighlighted;
@@ -458,10 +456,10 @@ class _ComparisonCell extends StatelessWidget {
               icon!,
               color: AFThemeExtension.of(context).strongText,
             ),
-          ] else ...[
+          ] else if (label != null) ...[
             Expanded(
               child: FlowyText.medium(
-                label,
+                label!,
                 lineHeight: 1.2,
                 color: AFThemeExtension.of(context).strongText,
               ),
@@ -660,6 +658,11 @@ final _planLabels = [
   ),
   _PlanItem(
     label: LocaleKeys.settings_comparePlanDialog_planLabels_itemFive.tr(),
+    tooltip: LocaleKeys.settings_comparePlanDialog_planLabels_tooltipFive.tr(),
+  ),
+  _PlanItem(
+    label:
+        LocaleKeys.settings_comparePlanDialog_planLabels_intelligentSearch.tr(),
   ),
   _PlanItem(
     label: LocaleKeys.settings_comparePlanDialog_planLabels_itemSix.tr(),
@@ -667,66 +670,96 @@ final _planLabels = [
   ),
   _PlanItem(
     label: LocaleKeys.settings_comparePlanDialog_planLabels_itemSeven.tr(),
-    tooltip: LocaleKeys.settings_comparePlanDialog_planLabels_tooltipSeven.tr(),
+    tooltip: LocaleKeys.settings_comparePlanDialog_planLabels_tooltipSix.tr(),
+  ),
+  _PlanItem(
+    label: LocaleKeys.settings_comparePlanDialog_planLabels_itemFileUpload.tr(),
+  ),
+  _PlanItem(
+    label:
+        LocaleKeys.settings_comparePlanDialog_planLabels_customNamespace.tr(),
+    tooltip: LocaleKeys
+        .settings_comparePlanDialog_planLabels_customNamespaceTooltip
+        .tr(),
   ),
 ];
 
 class _CellItem {
-  const _CellItem(this.label, {this.icon});
+  const _CellItem({this.label, this.icon});
 
-  final String label;
+  final String? label;
   final FlowySvgData? icon;
 }
 
 final List<_CellItem> _freeLabels = [
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemOne.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemOne.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemTwo.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemTwo.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemThree.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemThree.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemFour.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemFour.tr(),
     icon: FlowySvgs.check_m,
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemFive.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemFive.tr(),
+  ),
+  _CellItem(
+    label:
+        LocaleKeys.settings_comparePlanDialog_freeLabels_intelligentSearch.tr(),
     icon: FlowySvgs.check_m,
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemSix.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemSix.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_freeLabels_itemSeven.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemSeven.tr(),
+  ),
+  _CellItem(
+    label: LocaleKeys.settings_comparePlanDialog_freeLabels_itemFileUpload.tr(),
+  ),
+  const _CellItem(
+    label: '',
   ),
 ];
 
 final List<_CellItem> _proLabels = [
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemOne.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemOne.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemTwo.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemTwo.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemThree.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemThree.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemFour.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemFour.tr(),
     icon: FlowySvgs.check_m,
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemFive.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemFive.tr(),
+  ),
+  _CellItem(
+    label:
+        LocaleKeys.settings_comparePlanDialog_proLabels_intelligentSearch.tr(),
     icon: FlowySvgs.check_m,
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemSix.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemSix.tr(),
   ),
   _CellItem(
-    LocaleKeys.settings_comparePlanDialog_proLabels_itemSeven.tr(),
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemSeven.tr(),
+  ),
+  _CellItem(
+    label: LocaleKeys.settings_comparePlanDialog_proLabels_itemFileUpload.tr(),
+  ),
+  const _CellItem(
+    label: '',
     icon: FlowySvgs.check_m,
   ),
 ];

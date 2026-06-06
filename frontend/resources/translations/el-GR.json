@@ -179,7 +179,7 @@
     "underline": "Υπογράμμιση",
     "strike": "Διακριτή διαγραφή",
     "numList": "Αριθμημένη λίστα",
-    "bulletList": "Bulleted List",
+    "bulletList": "Bulleted list",
     "checkList": "Check List",
     "inlineCode": "Inline Code",
     "quote": "Quote Block",
@@ -305,12 +305,7 @@
       "cloudServerType": "Cloud server",
       "cloudServerTypeTip": "Please note that it might log out your current account after switching the cloud server",
       "cloudLocal": "Local",
-      "cloudSupabase": "Supabase",
-      "cloudSupabaseUrl": "Supabase URL",
-      "cloudSupabaseUrlCanNotBeEmpty": "The supabase url can't be empty",
-      "cloudSupabaseAnonKey": "Supabase anon key",
-      "cloudSupabaseAnonKeyCanNotBeEmpty": "The anon key can't be empty",
-      "cloudAppFlowy": "AppFlowy Cloud Beta",
+      "cloudAppFlowy": "AppFlowy Cloud",
       "cloudAppFlowySelfHost": "AppFlowy Cloud Self-hosted",
       "appFlowyCloudUrlCanNotBeEmpty": "The cloud url can't be empty",
       "clickToCopy": "Click to copy",
@@ -729,8 +724,7 @@
     "url": {
       "launch": "Άνοιγμα συνδέσμου στο πρόγραμμα περιήγησης",
       "copy": "Copy link to clipboard",
-      "textFieldHint": "Enter a URL",
-      "copiedNotification": "Copied to clipboard!"
+      "textFieldHint": "Enter a URL"
     },
     "relation": {
       "relatedDatabasePlaceLabel": "Related Database",
@@ -813,7 +807,7 @@
       "quoteList": "Quote list",
       "numberedList": "Αριθμημένη λίστα",
       "bulletedList": "Bulleted list",
-      "todoList": "Todo List",
+      "todoList": "Todo list",
       "callout": "Callout",
       "cover": {
         "changeCover": "Change Cover",
@@ -1221,7 +1215,7 @@
   },
   "editor": {
     "bold": "Bold",
-    "bulletedList": "Bulleted List",
+    "bulletedList": "Bulleted list",
     "bulletedListShortForm": "Bulleted",
     "checkbox": "Checkbox",
     "embedCode": "Embed Code",
@@ -1234,7 +1228,7 @@
     "date": "Date",
     "italic": "Italic",
     "link": "Link",
-    "numberedList": "Numbered List",
+    "numberedList": "Numbered list",
     "numberedListShortForm": "Numbered",
     "quote": "Quote",
     "strikethrough": "Strikethrough",

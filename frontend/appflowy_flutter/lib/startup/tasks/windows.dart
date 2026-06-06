@@ -1,16 +1,13 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-
-import 'package:appflowy/core/helpers/helpers.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/startup/tasks/app_window_size_manager.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
+import 'package:flutter/material.dart';
 import 'package:scaled_app/scaled_app.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 class InitAppWindowTask extends LaunchTask with WindowListener {
   InitAppWindowTask({this.title = 'AppFlowy'});
@@ -20,8 +17,16 @@ class InitAppWindowTask extends LaunchTask with WindowListener {
 
   @override
   Future<void> initialize(LaunchContext context) async {
-    // Don't initialize on mobile or web.
-    if (!defaultTargetPlatform.isDesktop || context.env.isIntegrationTest) {
+    await super.initialize(context);
+
+    // Don't initialize in tests or on web
+    if (context.env.isTest || UniversalPlatform.isWeb) {
+      return;
+    }
+
+    if (UniversalPlatform.isMobile) {
+      final scale = await windowSizeManager.getScaleFactor();
+      ScaledWidgetsFlutterBinding.instance.scaleFactor = (_) => scale;
       return;
     }
 
@@ -44,7 +49,9 @@ class InitAppWindowTask extends LaunchTask with WindowListener {
 
     final position = await windowSizeManager.getPosition();
 
-    if (PlatformExtension.isWindows) {
+    if (UniversalPlatform.isWindows) {
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+
       doWhenWindowReady(() async {
         appWindow.minSize = windowOptions.minimumSize;
         appWindow.maxSize = windowOptions.maximumSize;
@@ -53,8 +60,6 @@ class InitAppWindowTask extends LaunchTask with WindowListener {
         if (position != null) {
           appWindow.position = position;
         }
-
-        appWindow.show();
 
         /// on Windows we maximize the window if it was previously closed
         /// from a maximized state.
@@ -130,5 +135,9 @@ class InitAppWindowTask extends LaunchTask with WindowListener {
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    await super.dispose();
+
+    windowManager.removeListener(this);
+  }
 }

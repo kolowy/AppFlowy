@@ -2,16 +2,16 @@ import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/workspace/application/settings/prelude.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/shared/sidebar_setting.dart';
-import 'package:appflowy/workspace/presentation/settings/pages/settings_account_view.dart';
+import 'package:appflowy/workspace/presentation/settings/pages/account/account_user_profile.dart';
 import 'package:appflowy/workspace/presentation/settings/pages/settings_workspace_view.dart';
+import 'package:appflowy/workspace/presentation/settings/pages/sites/domain/domain_settings_dialog.dart';
 import 'package:appflowy/workspace/presentation/settings/settings_dialog.dart';
 import 'package:appflowy/workspace/presentation/settings/widgets/settings_menu_element.dart';
 import 'package:appflowy/workspace/presentation/widgets/toggle/toggle.dart';
 import 'package:easy_localization/easy_localization.dart';
-import 'package:flowy_infra_ui/style_widget/text_field.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../desktop/board/board_hide_groups_test.dart';
 import 'base.dart';
 import 'common_operations.dart';
 
@@ -77,15 +77,15 @@ extension AppFlowySettings on WidgetTester {
   Future<void> enterUserName(String name) async {
     // Enable editing username
     final editUsernameFinder = find.descendant(
-      of: find.byType(UserProfileSetting),
-      matching: find.byFlowySvg(FlowySvgs.edit_s),
+      of: find.byType(AccountUserProfile),
+      matching: find.byFlowySvg(FlowySvgs.toolbar_link_edit_m),
     );
-    await tap(editUsernameFinder);
+    await tap(editUsernameFinder, warnIfMissed: false);
     await pumpAndSettle();
 
     final userNameFinder = find.descendant(
-      of: find.byType(UserProfileSetting),
-      matching: find.byType(FlowyTextField),
+      of: find.byType(AccountUserProfile),
+      matching: find.byType(TextField),
     );
     await enterText(userNameFinder, name);
     await pumpAndSettle();
@@ -115,6 +115,22 @@ extension AppFlowySettings on WidgetTester {
 
     // tap anywhere to close the settings page
     await tapAt(Offset.zero);
+    await pumpAndSettle();
+  }
+
+  Future<void> updateNamespace(String namespace) async {
+    final dialog = find.byType(DomainSettingsDialog);
+    expect(dialog, findsOneWidget);
+
+    // input the new namespace
+    await enterText(
+      find.descendant(
+        of: dialog,
+        matching: find.byType(TextField),
+      ),
+      namespace,
+    );
+    await tapButton(find.text(LocaleKeys.button_save.tr()));
     await pumpAndSettle();
   }
 }

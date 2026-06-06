@@ -3,12 +3,13 @@ use client_api::entity::billing_dto::{
   WorkspaceSubscriptionStatus, WorkspaceUsageAndLimit,
 };
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use validator::Validate;
 
 use flowy_derive::{ProtoBuf, ProtoBuf_Enum};
 use flowy_user_pub::cloud::{AFWorkspaceSettings, AFWorkspaceSettingsChange};
-use flowy_user_pub::entities::{Role, WorkspaceInvitation, WorkspaceMember};
+use flowy_user_pub::entities::{
+  AuthType, Role, WorkspaceInvitation, WorkspaceMember, WorkspaceType,
+};
 use lib_infra::validator_fn::required_not_empty_str;
 
 #[derive(ProtoBuf, Default, Clone)]
@@ -24,6 +25,9 @@ pub struct WorkspaceMemberPB {
 
   #[pb(index = 4, one_of)]
   pub avatar_url: Option<String>,
+
+  #[pb(index = 5, one_of)]
+  pub joined_at: Option<i64>,
 }
 
 impl From<WorkspaceMember> for WorkspaceMemberPB {
@@ -33,6 +37,7 @@ impl From<WorkspaceMember> for WorkspaceMemberPB {
       name: value.name,
       role: value.role.into(),
       avatar_url: value.avatar_url,
+      joined_at: value.joined_at,
     }
   }
 }
@@ -46,7 +51,7 @@ pub struct RepeatedWorkspaceMemberPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct WorkspaceMemberInvitationPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -98,7 +103,7 @@ impl From<WorkspaceInvitation> for WorkspaceInvitationPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct AcceptWorkspaceInvitationPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub invite_id: String,
 }
 
@@ -106,7 +111,7 @@ pub struct AcceptWorkspaceInvitationPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct AddWorkspaceMemberPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -117,14 +122,14 @@ pub struct AddWorkspaceMemberPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct QueryWorkspacePB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 }
 
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct RemoveWorkspaceMemberPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -135,7 +140,7 @@ pub struct RemoveWorkspaceMemberPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct UpdateWorkspaceMemberPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -147,12 +152,23 @@ pub struct UpdateWorkspaceMemberPB {
 }
 
 // Workspace Role
-#[derive(ProtoBuf_Enum, Clone, Default)]
+#[derive(Debug, ProtoBuf_Enum, Clone, Default, Eq, PartialEq)]
 pub enum AFRolePB {
   Owner = 0,
   Member = 1,
   #[default]
   Guest = 2,
+}
+
+impl From<i32> for AFRolePB {
+  fn from(value: i32) -> Self {
+    match value {
+      0 => AFRolePB::Owner,
+      1 => AFRolePB::Member,
+      2 => AFRolePB::Guest,
+      _ => AFRolePB::Guest,
+    }
+  }
 }
 
 impl From<AFRolePB> for Role {
@@ -178,14 +194,24 @@ impl From<Role> for AFRolePB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct UserWorkspaceIdPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
+}
+
+#[derive(ProtoBuf, Default, Clone, Validate)]
+pub struct OpenUserWorkspacePB {
+  #[pb(index = 1)]
+  #[validate(custom(function = "required_not_empty_str"))]
+  pub workspace_id: String,
+
+  #[pb(index = 2)]
+  pub workspace_type: WorkspaceTypePB,
 }
 
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct CancelWorkspaceSubscriptionPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -198,7 +224,7 @@ pub struct CancelWorkspaceSubscriptionPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct SuccessWorkspaceSubscriptionPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2, one_of)]
@@ -214,25 +240,100 @@ pub struct WorkspaceMemberIdPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct CreateWorkspacePB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub name: String,
+
+  #[pb(index = 2)]
+  pub workspace_type: WorkspaceTypePB,
+}
+
+#[derive(ProtoBuf_Enum, Copy, Default, Debug, Clone, Eq, PartialEq)]
+#[repr(u8)]
+pub enum WorkspaceTypePB {
+  #[default]
+  LocalW = 0,
+  ServerW = 1,
+}
+
+impl From<i32> for WorkspaceTypePB {
+  fn from(value: i32) -> Self {
+    match value {
+      0 => WorkspaceTypePB::LocalW,
+      1 => WorkspaceTypePB::ServerW,
+      _ => WorkspaceTypePB::ServerW,
+    }
+  }
+}
+
+impl From<WorkspaceType> for WorkspaceTypePB {
+  fn from(value: WorkspaceType) -> Self {
+    match value {
+      WorkspaceType::Local => WorkspaceTypePB::LocalW,
+      WorkspaceType::Server => WorkspaceTypePB::ServerW,
+    }
+  }
+}
+
+impl From<WorkspaceTypePB> for WorkspaceType {
+  fn from(value: WorkspaceTypePB) -> Self {
+    match value {
+      WorkspaceTypePB::LocalW => WorkspaceType::Local,
+      WorkspaceTypePB::ServerW => WorkspaceType::Server,
+    }
+  }
+}
+
+#[derive(ProtoBuf_Enum, Copy, Default, Debug, Clone, Eq, PartialEq)]
+#[repr(u8)]
+pub enum AuthTypePB {
+  #[default]
+  Local = 0,
+  Server = 1,
+}
+
+impl From<i32> for AuthTypePB {
+  fn from(value: i32) -> Self {
+    match value {
+      0 => AuthTypePB::Local,
+      1 => AuthTypePB::Server,
+      _ => AuthTypePB::Server,
+    }
+  }
+}
+
+impl From<AuthType> for AuthTypePB {
+  fn from(value: AuthType) -> Self {
+    match value {
+      AuthType::Local => AuthTypePB::Local,
+      AuthType::AppFlowyCloud => AuthTypePB::Server,
+    }
+  }
+}
+
+impl From<AuthTypePB> for AuthType {
+  fn from(value: AuthTypePB) -> Self {
+    match value {
+      AuthTypePB::Local => AuthType::Local,
+      AuthTypePB::Server => AuthType::AppFlowyCloud,
+    }
+  }
 }
 
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct RenameWorkspacePB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub new_name: String,
 }
 
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct ChangeWorkspaceIconPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -242,7 +343,7 @@ pub struct ChangeWorkspaceIconPB {
 #[derive(ProtoBuf, Default, Clone, Validate, Debug)]
 pub struct SubscribeWorkspacePB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
@@ -376,83 +477,51 @@ pub struct BillingPortalPB {
   pub url: String,
 }
 
-#[derive(ProtoBuf, Default, Clone, Validate)]
-pub struct UseAISettingPB {
+#[derive(ProtoBuf, Default, Clone, Validate, Eq, PartialEq)]
+pub struct WorkspaceSettingsPB {
   #[pb(index = 1)]
   pub disable_search_indexing: bool,
 
   #[pb(index = 2)]
-  pub ai_model: AIModelPB,
+  pub ai_model: String,
+
+  #[pb(index = 3)]
+  pub workspace_type: WorkspaceTypePB,
 }
 
-impl From<AFWorkspaceSettings> for UseAISettingPB {
-  fn from(value: AFWorkspaceSettings) -> Self {
+impl From<&AFWorkspaceSettings> for WorkspaceSettingsPB {
+  fn from(value: &AFWorkspaceSettings) -> Self {
     Self {
       disable_search_indexing: value.disable_search_indexing,
-      ai_model: AIModelPB::from_str(&value.ai_model).unwrap_or_default(),
+      ai_model: value.ai_model.clone(),
+      workspace_type: WorkspaceTypePB::ServerW,
     }
   }
 }
 
-#[derive(ProtoBuf, Default, Clone, Validate)]
+#[derive(ProtoBuf, Default, Clone, Validate, Debug)]
 pub struct UpdateUserWorkspaceSettingPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2, one_of)]
   pub disable_search_indexing: Option<bool>,
 
   #[pb(index = 3, one_of)]
-  pub ai_model: Option<AIModelPB>,
+  pub ai_model: Option<String>,
 }
 
 impl From<UpdateUserWorkspaceSettingPB> for AFWorkspaceSettingsChange {
   fn from(value: UpdateUserWorkspaceSettingPB) -> Self {
     let mut change = AFWorkspaceSettingsChange::new();
     if let Some(disable_search_indexing) = value.disable_search_indexing {
-      change = change.disable_search_indexing(disable_search_indexing);
+      change.disable_search_indexing = Some(disable_search_indexing);
     }
     if let Some(ai_model) = value.ai_model {
-      change = change.ai_model(ai_model.to_str().to_string());
+      change.ai_model = Some(ai_model);
     }
     change
-  }
-}
-
-#[derive(ProtoBuf_Enum, Debug, Clone, Eq, PartialEq, Default)]
-pub enum AIModelPB {
-  #[default]
-  DefaultModel = 0,
-  GPT35 = 1,
-  GPT4o = 2,
-  Claude3Sonnet = 3,
-  Claude3Opus = 4,
-}
-
-impl AIModelPB {
-  pub fn to_str(&self) -> &str {
-    match self {
-      AIModelPB::DefaultModel => "default-model",
-      AIModelPB::GPT35 => "gpt-3.5-turbo",
-      AIModelPB::GPT4o => "gpt-4o",
-      AIModelPB::Claude3Sonnet => "claude-3-sonnet",
-      AIModelPB::Claude3Opus => "claude-3-opus",
-    }
-  }
-}
-
-impl FromStr for AIModelPB {
-  type Err = anyhow::Error;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "gpt-3.5-turbo" => Ok(AIModelPB::GPT35),
-      "gpt-4o" => Ok(AIModelPB::GPT4o),
-      "claude-3-sonnet" => Ok(AIModelPB::Claude3Sonnet),
-      "claude-3-opus" => Ok(AIModelPB::Claude3Opus),
-      _ => Ok(AIModelPB::DefaultModel),
-    }
   }
 }
 
@@ -643,7 +712,7 @@ impl From<i64> for WorkspaceSubscriptionStatusPB {
 #[derive(ProtoBuf, Default, Clone, Validate)]
 pub struct UpdateWorkspaceSubscriptionPaymentPeriodPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]

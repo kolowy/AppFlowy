@@ -1,4 +1,5 @@
-import 'package:appflowy/workspace/presentation/widgets/date_picker/appflowy_date_picker.dart';
+import 'package:appflowy/workspace/presentation/widgets/date_picker/appflowy_date_picker_base.dart';
+import 'package:appflowy/workspace/presentation/widgets/date_picker/desktop_date_picker.dart';
 import 'package:appflowy/workspace/presentation/widgets/date_picker/utils/date_time_format_ext.dart';
 import 'package:appflowy/workspace/presentation/widgets/date_picker/utils/user_time_format_ext.dart';
 import 'package:appflowy/workspace/presentation/widgets/date_picker/widgets/reminder_selector.dart';
@@ -15,58 +16,73 @@ import 'package:flutter/services.dart';
 class DatePickerOptions {
   DatePickerOptions({
     DateTime? focusedDay,
-    this.popoverMutex,
     this.selectedDay,
-    this.firstDay,
-    this.lastDay,
-    this.timeStr,
-    this.endTimeStr,
     this.includeTime = false,
     this.isRange = false,
-    this.enableRanges = true,
     this.dateFormat = UserDateFormatPB.Friendly,
     this.timeFormat = UserTimeFormatPB.TwentyFourHour,
     this.selectedReminderOption,
     this.onDaySelected,
-    required this.onIncludeTimeChanged,
-    this.onStartTimeChanged,
-    this.onEndTimeChanged,
     this.onRangeSelected,
+    this.onIncludeTimeChanged,
     this.onIsRangeChanged,
     this.onReminderSelected,
   }) : focusedDay = focusedDay ?? DateTime.now();
 
   final DateTime focusedDay;
-  final PopoverMutex? popoverMutex;
   final DateTime? selectedDay;
-  final DateTime? firstDay;
-  final DateTime? lastDay;
-  final String? timeStr;
-  final String? endTimeStr;
   final bool includeTime;
   final bool isRange;
-  final bool enableRanges;
   final UserDateFormatPB dateFormat;
   final UserTimeFormatPB timeFormat;
   final ReminderOption? selectedReminderOption;
 
   final DaySelectedCallback? onDaySelected;
-  final IncludeTimeChangedCallback onIncludeTimeChanged;
-  final TimeChangedCallback? onStartTimeChanged;
-  final TimeChangedCallback? onEndTimeChanged;
   final RangeSelectedCallback? onRangeSelected;
-  final Function(bool)? onIsRangeChanged;
+  final IncludeTimeChangedCallback? onIncludeTimeChanged;
+  final IsRangeChangedCallback? onIsRangeChanged;
   final OnReminderSelected? onReminderSelected;
+
+  DatePickerOptions copyWith({
+    DateTime? focusedDay,
+    DateTime? selectedDay,
+    bool? includeTime,
+    bool? isRange,
+    UserDateFormatPB? dateFormat,
+    UserTimeFormatPB? timeFormat,
+    ReminderOption? selectedReminderOption,
+    DaySelectedCallback? onDaySelected,
+    RangeSelectedCallback? onRangeSelected,
+    IncludeTimeChangedCallback? onIncludeTimeChanged,
+    IsRangeChangedCallback? onIsRangeChanged,
+    OnReminderSelected? onReminderSelected,
+  }) {
+    return DatePickerOptions(
+      focusedDay: focusedDay ?? this.focusedDay,
+      selectedDay: selectedDay ?? this.selectedDay,
+      includeTime: includeTime ?? this.includeTime,
+      isRange: isRange ?? this.isRange,
+      dateFormat: dateFormat ?? this.dateFormat,
+      timeFormat: timeFormat ?? this.timeFormat,
+      selectedReminderOption:
+          selectedReminderOption ?? this.selectedReminderOption,
+      onDaySelected: onDaySelected ?? this.onDaySelected,
+      onRangeSelected: onRangeSelected ?? this.onRangeSelected,
+      onIncludeTimeChanged: onIncludeTimeChanged ?? this.onIncludeTimeChanged,
+      onIsRangeChanged: onIsRangeChanged ?? this.onIsRangeChanged,
+      onReminderSelected: onReminderSelected ?? this.onReminderSelected,
+    );
+  }
 }
 
 abstract class DatePickerService {
   void show(Offset offset, {required DatePickerOptions options});
+
   void dismiss();
 }
 
 const double _datePickerWidth = 260;
-const double _datePickerHeight = 370;
-const double _includeTimeHeight = 32;
+const double _datePickerHeight = 404;
 const double _ySpacing = 15;
 
 class DatePickerMenu extends DatePickerService {
@@ -74,6 +90,7 @@ class DatePickerMenu extends DatePickerService {
 
   final BuildContext context;
   final EditorState editorState;
+  PopoverMutex? popoverMutex;
 
   OverlayEntry? _menuEntry;
 
@@ -81,6 +98,9 @@ class DatePickerMenu extends DatePickerService {
   void dismiss() {
     _menuEntry?.remove();
     _menuEntry = null;
+    popoverMutex?.close();
+    popoverMutex?.dispose();
+    popoverMutex = null;
   }
 
   @override
@@ -111,6 +131,7 @@ class DatePickerMenu extends DatePickerService {
       }
     }
 
+    popoverMutex = PopoverMutex();
     _menuEntry = OverlayEntry(
       builder: (_) => Material(
         type: MaterialType.transparency,
@@ -133,6 +154,7 @@ class DatePickerMenu extends DatePickerService {
                     offset: Offset(offsetX, offsetY),
                     showBelow: showBelow,
                     options: options,
+                    popoverMutex: popoverMutex,
                   ),
                 ],
               ),
@@ -151,27 +173,24 @@ class _AnimatedDatePicker extends StatefulWidget {
     required this.offset,
     required this.showBelow,
     required this.options,
+    this.popoverMutex,
   });
 
   final Offset offset;
   final bool showBelow;
   final DatePickerOptions options;
+  final PopoverMutex? popoverMutex;
 
   @override
   State<_AnimatedDatePicker> createState() => _AnimatedDatePickerState();
 }
 
 class _AnimatedDatePickerState extends State<_AnimatedDatePicker> {
-  late bool _includeTime = widget.options.includeTime;
+  late DatePickerOptions options = widget.options;
 
   @override
   Widget build(BuildContext context) {
-    double dy = widget.offset.dy;
-    if (!widget.showBelow && _includeTime) {
-      dy -= _includeTimeHeight;
-    }
-
-    dy += (widget.showBelow ? _ySpacing : -_ySpacing);
+    final dy = widget.offset.dy + (widget.showBelow ? _ySpacing : -_ySpacing);
 
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 200),
@@ -183,30 +202,49 @@ class _AnimatedDatePickerState extends State<_AnimatedDatePicker> {
           Theme.of(context).colorScheme.shadow,
         ),
         constraints: BoxConstraints.loose(const Size(_datePickerWidth, 465)),
-        child: AppFlowyDatePicker(
-          includeTime: _includeTime,
-          onIncludeTimeChanged: (includeTime) {
-            widget.options.onIncludeTimeChanged.call(!includeTime);
-            setState(() => _includeTime = !includeTime);
-          },
-          enableRanges: widget.options.enableRanges,
-          isRange: widget.options.isRange,
-          onIsRangeChanged: widget.options.onIsRangeChanged,
-          dateFormat: widget.options.dateFormat.simplified,
-          timeFormat: widget.options.timeFormat.simplified,
-          selectedDay: widget.options.selectedDay,
-          focusedDay: widget.options.focusedDay,
-          firstDay: widget.options.firstDay,
-          lastDay: widget.options.lastDay,
-          timeStr: widget.options.timeStr,
-          endTimeStr: widget.options.endTimeStr,
-          popoverMutex: widget.options.popoverMutex,
-          selectedReminderOption:
-              widget.options.selectedReminderOption ?? ReminderOption.none,
-          onStartTimeSubmitted: widget.options.onStartTimeChanged,
-          onDaySelected: widget.options.onDaySelected,
-          onRangeSelected: widget.options.onRangeSelected,
-          onReminderSelected: widget.options.onReminderSelected,
+        child: DesktopAppFlowyDatePicker(
+          includeTime: options.includeTime,
+          isRange: options.isRange,
+          dateFormat: options.dateFormat.simplified,
+          timeFormat: options.timeFormat.simplified,
+          dateTime: options.selectedDay,
+          popoverMutex: widget.popoverMutex,
+          reminderOption: options.selectedReminderOption ?? ReminderOption.none,
+          onDaySelected: options.onDaySelected == null
+              ? null
+              : (d) {
+                  options.onDaySelected?.call(d);
+                  setState(() {
+                    options = options.copyWith(selectedDay: d);
+                  });
+                },
+          onIsRangeChanged: options.onIsRangeChanged == null
+              ? null
+              : (isRange, s, e) {
+                  options.onIsRangeChanged?.call(isRange, s, e);
+                },
+          onIncludeTimeChanged: options.onIncludeTimeChanged == null
+              ? null
+              : (include, s, e) {
+                  options.onIncludeTimeChanged?.call(include, s, e);
+                  setState(() {
+                    options =
+                        options.copyWith(includeTime: include, selectedDay: s);
+                  });
+                },
+          onRangeSelected: options.onRangeSelected == null
+              ? null
+              : (s, e) {
+                  options.onRangeSelected?.call(s, e);
+                },
+          onReminderSelected: options.onReminderSelected == null
+              ? null
+              : (o) {
+                  options.onReminderSelected?.call(o);
+                  setState(() {
+                    options = options.copyWith(selectedReminderOption: o);
+                  });
+                },
         ),
       ),
     );

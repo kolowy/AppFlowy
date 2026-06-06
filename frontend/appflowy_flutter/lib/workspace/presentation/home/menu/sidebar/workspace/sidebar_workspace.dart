@@ -1,17 +1,18 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
-import 'package:appflowy/plugins/document/presentation/editor_plugins/openai/widgets/loading.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
+import 'package:appflowy/shared/loading.dart';
+import 'package:appflowy/workspace/application/home/home_setting_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/shared/sidebar_setting.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_icon.dart';
 import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/_sidebar_workspace_menu.dart';
-import 'package:appflowy/workspace/presentation/home/toast.dart';
+import 'package:appflowy/workspace/presentation/home/menu/sidebar/workspace/workspace_notifier.dart';
 import 'package:appflowy/workspace/presentation/notifications/widgets/notification_button.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_backend/log.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/code.pbenum.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/user_profile.pb.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
+import 'package:collection/collection.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
@@ -30,10 +31,20 @@ class _SidebarWorkspaceState extends State<SidebarWorkspace> {
   Loading? loadingIndicator;
 
   final ValueNotifier<bool> onHover = ValueNotifier(false);
+  int maxRetryCount = 3;
+  int retryCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    openWorkspaceNotifier.addListener(_openWorkspaceFromInvitation);
+  }
 
   @override
   void dispose() {
     onHover.dispose();
+    openWorkspaceNotifier.removeListener(_openWorkspaceFromInvitation);
 
     super.dispose();
   }
@@ -63,23 +74,28 @@ class _SidebarWorkspaceState extends State<SidebarWorkspace> {
                       ? Theme.of(context).colorScheme.secondary
                       : Colors.transparent,
                 ),
-                child: child,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SidebarSwitchWorkspaceButton(
+                        userProfile: widget.userProfile,
+                        currentWorkspace: currentWorkspace,
+                        isHover: onHover,
+                      ),
+                    ),
+                    UserSettingButton(
+                      isHover: onHover,
+                    ),
+                    const HSpace(8.0),
+                    NotificationButton(
+                      isHover: onHover,
+                      key: ValueKey(currentWorkspace.workspaceId),
+                    ),
+                    const HSpace(4.0),
+                  ],
+                ),
               );
             },
-            child: Row(
-              children: [
-                Expanded(
-                  child: SidebarSwitchWorkspaceButton(
-                    userProfile: widget.userProfile,
-                    currentWorkspace: currentWorkspace,
-                  ),
-                ),
-                UserSettingButton(userProfile: widget.userProfile),
-                const HSpace(8.0),
-                const NotificationButton(),
-                const HSpace(4.0),
-              ],
-            ),
           ),
         );
       },
@@ -90,6 +106,11 @@ class _SidebarWorkspaceState extends State<SidebarWorkspace> {
     final actionResult = state.actionResult;
     if (actionResult == null) {
       return;
+    }
+
+    final settingBloc = context.read<HomeSettingBloc?>();
+    if (settingBloc?.state.isNotificationPanelCollapsed == false) {
+      settingBloc?.add(HomeSettingEvent.collapseNotificationPanel());
     }
 
     final actionType = actionResult.actionType;
@@ -115,7 +136,7 @@ class _SidebarWorkspaceState extends State<SidebarWorkspace> {
     });
 
     // show a confirmation dialog if the action is create and the result is LimitExceeded failure
-    if (actionType == UserWorkspaceActionType.create &&
+    if (actionType == WorkspaceActionType.create &&
         result.isFailure &&
         result.getFailure().code == ErrorCode.WorkspaceLimitExceeded) {
       showDialog(
@@ -129,46 +150,127 @@ class _SidebarWorkspaceState extends State<SidebarWorkspace> {
 
     final String? message;
     switch (actionType) {
-      case UserWorkspaceActionType.create:
+      case WorkspaceActionType.create:
         message = result.fold(
           (s) => LocaleKeys.workspace_createSuccess.tr(),
           (e) => '${LocaleKeys.workspace_createFailed.tr()}: ${e.msg}',
         );
         break;
-      case UserWorkspaceActionType.delete:
+      case WorkspaceActionType.delete:
         message = result.fold(
           (s) => LocaleKeys.workspace_deleteSuccess.tr(),
           (e) => '${LocaleKeys.workspace_deleteFailed.tr()}: ${e.msg}',
         );
         break;
-      case UserWorkspaceActionType.open:
+      case WorkspaceActionType.open:
         message = result.fold(
           (s) => LocaleKeys.workspace_openSuccess.tr(),
           (e) => '${LocaleKeys.workspace_openFailed.tr()}: ${e.msg}',
         );
+
         break;
-      case UserWorkspaceActionType.updateIcon:
+      case WorkspaceActionType.updateIcon:
         message = result.fold(
           (s) => LocaleKeys.workspace_updateIconSuccess.tr(),
           (e) => '${LocaleKeys.workspace_updateIconFailed.tr()}: ${e.msg}',
         );
         break;
-      case UserWorkspaceActionType.rename:
+      case WorkspaceActionType.rename:
         message = result.fold(
           (s) => LocaleKeys.workspace_renameSuccess.tr(),
           (e) => '${LocaleKeys.workspace_renameFailed.tr()}: ${e.msg}',
         );
         break;
-      case UserWorkspaceActionType.none:
-      case UserWorkspaceActionType.fetchWorkspaces:
-      case UserWorkspaceActionType.leave:
+
+      case WorkspaceActionType.fetchWorkspaces:
+      case WorkspaceActionType.none:
+      case WorkspaceActionType.leave:
+      case WorkspaceActionType.fetchSubscriptionInfo:
         message = null;
         break;
     }
 
     if (message != null) {
-      showSnackBarMessage(context, message);
+      showToastNotification(
+        message: message,
+        type: result.fold(
+          (_) => ToastificationType.success,
+          (_) => ToastificationType.error,
+        ),
+      );
     }
+  }
+
+  // This function is a workaround, when we support open the workspace from invitation deep link,
+  // we should refactor the code here
+  void _openWorkspaceFromInvitation() {
+    final value = openWorkspaceNotifier.value;
+    final workspaceId = value?.workspaceId;
+    final email = value?.email;
+
+    if (workspaceId == null) {
+      Log.info('No workspace id to open');
+      return;
+    }
+
+    if (email == null) {
+      Log.info('Open workspace from invitation with no email');
+      return;
+    }
+
+    final state = context.read<UserWorkspaceBloc>().state;
+    final currentWorkspace = state.currentWorkspace;
+    if (currentWorkspace?.workspaceId == workspaceId) {
+      Log.info('Already in the workspace');
+      return;
+    }
+
+    if (email != widget.userProfile.email) {
+      Log.info(
+        'Current user email: ${widget.userProfile.email} is not the same as the email in the invitation: $email',
+      );
+      return;
+    }
+
+    final openWorkspace = state.workspaces.firstWhereOrNull(
+      (workspace) => workspace.workspaceId == workspaceId,
+    );
+
+    if (openWorkspace == null) {
+      Log.error('Workspace not found, try to fetch workspaces');
+
+      context.read<UserWorkspaceBloc>().add(
+            UserWorkspaceEvent.fetchWorkspaces(
+              initialWorkspaceId: workspaceId,
+            ),
+          );
+
+      Future.delayed(
+        Duration(milliseconds: 250 + retryCount * 250),
+        () {
+          if (retryCount >= maxRetryCount) {
+            openWorkspaceNotifier.value = null;
+            retryCount = 0;
+            Log.error('Failed to open workspace from invitation');
+            return;
+          }
+
+          retryCount++;
+          _openWorkspaceFromInvitation();
+        },
+      );
+
+      return;
+    }
+
+    context.read<UserWorkspaceBloc>().add(
+          UserWorkspaceEvent.openWorkspace(
+            workspaceId: workspaceId,
+            workspaceType: openWorkspace.workspaceType,
+          ),
+        );
+
+    openWorkspaceNotifier.value = null;
   }
 }
 
@@ -177,10 +279,12 @@ class SidebarSwitchWorkspaceButton extends StatefulWidget {
     super.key,
     required this.userProfile,
     required this.currentWorkspace,
+    this.isHover = false,
   });
 
   final UserWorkspacePB currentWorkspace;
   final UserProfilePB userProfile;
+  final bool isHover;
 
   @override
   State<SidebarSwitchWorkspaceButton> createState() =>
@@ -189,23 +293,24 @@ class SidebarSwitchWorkspaceButton extends StatefulWidget {
 
 class _SidebarSwitchWorkspaceButtonState
     extends State<SidebarSwitchWorkspaceButton> {
-  final ValueNotifier<bool> _isWorkSpaceMenuExpanded = ValueNotifier(false);
+  final PopoverController _popoverController = PopoverController();
 
   @override
   Widget build(BuildContext context) {
     return AppFlowyPopover(
-      direction: PopoverDirection.bottomWithLeftAligned,
+      direction: PopoverDirection.bottomWithCenterAligned,
       offset: const Offset(0, 5),
       constraints: const BoxConstraints(maxWidth: 300, maxHeight: 600),
+      margin: EdgeInsets.zero,
+      animationDuration: Durations.short3,
+      beginScaleFactor: 1.0,
+      beginOpacity: 0.8,
+      controller: _popoverController,
+      triggerActions: PopoverTriggerFlags.none,
       onOpen: () {
-        _isWorkSpaceMenuExpanded.value = true;
         context
             .read<UserWorkspaceBloc>()
-            .add(const UserWorkspaceEvent.fetchWorkspaces());
-      },
-      onClose: () {
-        _isWorkSpaceMenuExpanded.value = false;
-        Log.info('close workspace menu');
+            .add(UserWorkspaceEvent.fetchWorkspaces());
       },
       popupBuilder: (_) {
         return BlocProvider<UserWorkspaceBloc>.value(
@@ -217,7 +322,6 @@ class _SidebarSwitchWorkspaceButtonState
               if (currentWorkspace == null) {
                 return const SizedBox.shrink();
               }
-              Log.info('open workspace menu');
               return WorkspacesMenu(
                 userProfile: widget.userProfile,
                 currentWorkspace: currentWorkspace,
@@ -227,42 +331,79 @@ class _SidebarSwitchWorkspaceButtonState
           ),
         );
       },
-      child: FlowyIconTextButton(
-        margin: EdgeInsets.zero,
-        hoverColor: Colors.transparent,
-        textBuilder: (onHover) => SizedBox(
+      child: _SideBarSwitchWorkspaceButtonChild(
+        currentWorkspace: widget.currentWorkspace,
+        popoverController: _popoverController,
+        isHover: widget.isHover,
+      ),
+    );
+  }
+}
+
+class _SideBarSwitchWorkspaceButtonChild extends StatelessWidget {
+  const _SideBarSwitchWorkspaceButtonChild({
+    required this.popoverController,
+    required this.currentWorkspace,
+    required this.isHover,
+  });
+
+  final PopoverController popoverController;
+  final UserWorkspacePB currentWorkspace;
+  final bool isHover;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          context.read<UserWorkspaceBloc>().add(
+                UserWorkspaceEvent.fetchWorkspaces(),
+              );
+          popoverController.show();
+        },
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
           height: 30,
           child: Row(
             children: [
               const HSpace(4.0),
               WorkspaceIcon(
-                workspace: widget.currentWorkspace,
-                iconSize: 24,
+                workspaceIcon: currentWorkspace.icon,
+                workspaceName: currentWorkspace.name,
+                iconSize: 26,
                 fontSize: 16,
-                emojiSize: 18,
-                enableEdit: false,
+                emojiSize: 20,
+                isEditable: false,
+                showBorder: false,
                 borderRadius: 8.0,
+                figmaLineHeight: 18.0,
                 onSelected: (result) => context.read<UserWorkspaceBloc>().add(
                       UserWorkspaceEvent.updateWorkspaceIcon(
-                        widget.currentWorkspace.workspaceId,
-                        result.emoji,
+                        workspaceId: currentWorkspace.workspaceId,
+                        icon: result.emoji,
                       ),
                     ),
               ),
-              const HSpace(8),
+              const HSpace(6),
               Flexible(
                 child: FlowyText.medium(
-                  widget.currentWorkspace.name,
+                  currentWorkspace.name,
+                  color:
+                      isHover ? Theme.of(context).colorScheme.onSurface : null,
                   overflow: TextOverflow.ellipsis,
                   withTooltip: true,
                   fontSize: 15.0,
                 ),
               ),
-              const HSpace(4),
-              if (onHover)
-                const FlowySvg(
+              if (isHover) ...[
+                const HSpace(4),
+                FlowySvg(
                   FlowySvgs.workspace_drop_down_menu_show_s,
+                  color:
+                      isHover ? Theme.of(context).colorScheme.onSurface : null,
                 ),
+              ],
             ],
           ),
         ),

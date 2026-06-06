@@ -1,17 +1,17 @@
-use std::collections::HashMap;
-
 use collab::core::collab_state::SyncState;
 use collab_document::{
-  blocks::{json_str_to_hashmap, Block, BlockAction, DocumentData},
+  blocks::{Block, BlockAction, DocumentData, json_str_to_hashmap},
   document_awareness::{
     DocumentAwarenessPosition, DocumentAwarenessSelection, DocumentAwarenessState,
     DocumentAwarenessUser,
   },
 };
-
 use flowy_derive::{ProtoBuf, ProtoBuf_Enum};
 use flowy_error::ErrorCode;
 use lib_infra::validator_fn::{required_not_empty_str, required_valid_path};
+use std::collections::HashMap;
+use std::str::FromStr;
+use uuid::Uuid;
 use validator::Validate;
 
 use crate::parse::{NotEmptyStr, NotEmptyVec};
@@ -31,7 +31,7 @@ pub struct OpenDocumentPayloadPB {
 }
 
 pub struct OpenDocumentParams {
-  pub document_id: String,
+  pub document_id: Uuid,
 }
 
 impl TryInto<OpenDocumentParams> for OpenDocumentPayloadPB {
@@ -39,9 +39,9 @@ impl TryInto<OpenDocumentParams> for OpenDocumentPayloadPB {
   fn try_into(self) -> Result<OpenDocumentParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
-    Ok(OpenDocumentParams {
-      document_id: document_id.0,
-    })
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
+
+    Ok(OpenDocumentParams { document_id })
   }
 }
 
@@ -52,7 +52,7 @@ pub struct DocumentRedoUndoPayloadPB {
 }
 
 pub struct DocumentRedoUndoParams {
-  pub document_id: String,
+  pub document_id: Uuid,
 }
 
 impl TryInto<DocumentRedoUndoParams> for DocumentRedoUndoPayloadPB {
@@ -60,9 +60,8 @@ impl TryInto<DocumentRedoUndoParams> for DocumentRedoUndoPayloadPB {
   fn try_into(self) -> Result<DocumentRedoUndoParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
-    Ok(DocumentRedoUndoParams {
-      document_id: document_id.0,
-    })
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
+    Ok(DocumentRedoUndoParams { document_id })
   }
 }
 
@@ -81,15 +80,15 @@ pub struct DocumentRedoUndoResponsePB {
 #[derive(Default, ProtoBuf, Validate)]
 pub struct UploadFileParamsPB {
   #[pb(index = 1)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub workspace_id: String,
 
   #[pb(index = 2)]
-  #[validate(custom = "required_not_empty_str")]
+  #[validate(custom(function = "required_not_empty_str"))]
   pub document_id: String,
 
   #[pb(index = 3)]
-  #[validate(custom = "required_valid_path")]
+  #[validate(custom(function = "required_valid_path"))]
   pub local_file_path: String,
 }
 
@@ -100,7 +99,7 @@ pub struct UploadedFilePB {
   pub url: String,
 
   #[pb(index = 2)]
-  #[validate(custom = "required_valid_path")]
+  #[validate(custom(function = "required_valid_path"))]
   pub local_file_path: String,
 }
 
@@ -111,8 +110,15 @@ pub struct DownloadFilePB {
   pub url: String,
 
   #[pb(index = 2)]
-  #[validate(custom = "required_valid_path")]
+  #[validate(custom(function = "required_valid_path"))]
   pub local_file_path: String,
+}
+
+#[derive(Default, ProtoBuf, Validate)]
+pub struct DeleteFilePB {
+  #[pb(index = 1)]
+  #[validate(url)]
+  pub url: String,
 }
 
 #[derive(Default, ProtoBuf)]
@@ -125,7 +131,7 @@ pub struct CreateDocumentPayloadPB {
 }
 
 pub struct CreateDocumentParams {
-  pub document_id: String,
+  pub document_id: Uuid,
   pub initial_data: Option<DocumentData>,
 }
 
@@ -134,9 +140,10 @@ impl TryInto<CreateDocumentParams> for CreateDocumentPayloadPB {
   fn try_into(self) -> Result<CreateDocumentParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
     let initial_data = self.initial_data.map(|data| data.into());
     Ok(CreateDocumentParams {
-      document_id: document_id.0,
+      document_id,
       initial_data,
     })
   }
@@ -149,7 +156,7 @@ pub struct CloseDocumentPayloadPB {
 }
 
 pub struct CloseDocumentParams {
-  pub document_id: String,
+  pub document_id: Uuid,
 }
 
 impl TryInto<CloseDocumentParams> for CloseDocumentPayloadPB {
@@ -157,9 +164,8 @@ impl TryInto<CloseDocumentParams> for CloseDocumentPayloadPB {
   fn try_into(self) -> Result<CloseDocumentParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
-    Ok(CloseDocumentParams {
-      document_id: document_id.0,
-    })
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
+    Ok(CloseDocumentParams { document_id })
   }
 }
 
@@ -173,7 +179,7 @@ pub struct ApplyActionPayloadPB {
 }
 
 pub struct ApplyActionParams {
-  pub document_id: String,
+  pub document_id: Uuid,
   pub actions: Vec<BlockAction>,
 }
 
@@ -182,10 +188,11 @@ impl TryInto<ApplyActionParams> for ApplyActionPayloadPB {
   fn try_into(self) -> Result<ApplyActionParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
     let actions = NotEmptyVec::parse(self.actions).map_err(|_| ErrorCode::ApplyActionsIsEmpty)?;
     let actions = actions.0.into_iter().map(BlockAction::from).collect();
     Ok(ApplyActionParams {
-      document_id: document_id.0,
+      document_id,
       actions,
     })
   }
@@ -203,6 +210,11 @@ pub struct DocumentDataPB {
   pub meta: MetaPB,
 }
 
+#[derive(Default, Debug, ProtoBuf)]
+pub struct DocumentTextPB {
+  #[pb(index = 1)]
+  pub text: String,
+}
 #[derive(Default, ProtoBuf, Debug, Clone)]
 pub struct BlockPB {
   #[pb(index = 1)]
@@ -513,7 +525,7 @@ pub struct TextDeltaPayloadPB {
 }
 
 pub struct TextDeltaParams {
-  pub document_id: String,
+  pub document_id: Uuid,
   pub text_id: String,
   pub delta: String,
 }
@@ -523,10 +535,11 @@ impl TryInto<TextDeltaParams> for TextDeltaPayloadPB {
   fn try_into(self) -> Result<TextDeltaParams, Self::Error> {
     let document_id =
       NotEmptyStr::parse(self.document_id).map_err(|_| ErrorCode::DocumentIdIsEmpty)?;
+    let document_id = Uuid::from_str(&document_id.0).map_err(|_| ErrorCode::InvalidParams)?;
     let text_id = NotEmptyStr::parse(self.text_id).map_err(|_| ErrorCode::TextIdIsEmpty)?;
     let delta = self.delta.map_or_else(|| "".to_string(), |delta| delta);
     Ok(TextDeltaParams {
-      document_id: document_id.0,
+      document_id,
       text_id: text_id.0,
       delta,
     })

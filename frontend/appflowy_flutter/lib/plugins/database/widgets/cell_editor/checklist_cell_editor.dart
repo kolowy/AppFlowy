@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/database/application/cell/cell_controller_builder.dart';
 import 'package:appflowy/plugins/database/grid/presentation/layout/sizes.dart';
@@ -13,6 +14,7 @@ import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 import '../../application/cell/bloc/checklist_cell_bloc.dart';
 import 'checklist_cell_textfield.dart';
@@ -108,23 +110,43 @@ class ChecklistItemList extends StatelessWidget {
     final itemList = options
         .mapIndexed(
           (index, option) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+            key: ValueKey(option.data.id),
             child: ChecklistItem(
               task: option,
+              index: index,
               onSubmitted: index == options.length - 1 ? onUpdateTask : null,
-              key: ValueKey(option.data.id),
             ),
           ),
         )
         .toList();
 
     return Flexible(
-      child: ListView.separated(
-        itemBuilder: (context, index) => itemList[index],
-        separatorBuilder: (context, index) => const VSpace(4),
-        itemCount: itemList.length,
+      child: ReorderableListView.builder(
         shrinkWrap: true,
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        proxyDecorator: (child, index, _) => Material(
+          color: Colors.transparent,
+          child: MouseRegion(
+            cursor: UniversalPlatform.isWindows
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.grabbing,
+            child: IgnorePointer(
+              child: BlocProvider.value(
+                value: context.read<ChecklistCellBloc>(),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+        buildDefaultDragHandles: false,
+        itemBuilder: (context, index) => itemList[index],
+        itemCount: itemList.length,
+        padding: const EdgeInsets.symmetric(vertical: 6.0),
+        onReorder: (from, to) {
+          context
+              .read<ChecklistCellBloc>()
+              .add(ChecklistCellEvent.reorderTask(from, to));
+        },
       ),
     );
   }
@@ -138,17 +160,21 @@ class _EndEditingTaskIntent extends Intent {
   const _EndEditingTaskIntent();
 }
 
-/// Represents an existing task
-@visibleForTesting
+class _UpdateTaskDescriptionIntent extends Intent {
+  const _UpdateTaskDescriptionIntent();
+}
+
 class ChecklistItem extends StatefulWidget {
   const ChecklistItem({
     super.key,
     required this.task,
+    required this.index,
     this.onSubmitted,
     this.autofocus = false,
   });
 
   final ChecklistSelectOption task;
+  final int index;
   final VoidCallback? onSubmitted;
   final bool autofocus;
 
@@ -163,25 +189,17 @@ class _ChecklistItemState extends State<ChecklistItem> {
 
   bool isHovered = false;
   bool isFocused = false;
+  bool isComposing = false;
 
   final _debounceOnChanged = Debounce(
     duration: const Duration(milliseconds: 300),
   );
 
-  final selectTaskShortcut = {
-    SingleActivator(
-      LogicalKeyboardKey.enter,
-      meta: Platform.isMacOS,
-      control: !Platform.isMacOS,
-    ): const _SelectTaskIntent(),
-    const SingleActivator(LogicalKeyboardKey.escape):
-        const _EndEditingTaskIntent(),
-  };
-
   @override
   void initState() {
     super.initState();
     textController.text = widget.task.data.name;
+    textController.addListener(_onTextChanged);
     if (widget.autofocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         focusNode.requestFocus();
@@ -190,10 +208,23 @@ class _ChecklistItemState extends State<ChecklistItem> {
     }
   }
 
+  void _onTextChanged() =>
+      setState(() => isComposing = !textController.value.composing.isCollapsed);
+
+  @override
+  void didUpdateWidget(covariant oldWidget) {
+    if (!focusNode.hasFocus &&
+        oldWidget.task.data.name != widget.task.data.name) {
+      textController.text = widget.task.data.name;
+    }
+    super.didUpdateWidget(oldWidget);
+  }
+
   @override
   void dispose() {
     _debounceOnChanged.dispose();
 
+    textController.removeListener(_onTextChanged);
     textController.dispose();
     focusNode.dispose();
     textFieldFocusNode.dispose();
@@ -202,49 +233,57 @@ class _ChecklistItemState extends State<ChecklistItem> {
 
   @override
   Widget build(BuildContext context) {
-    final isFocusedOrHovered =
-        isHovered || isFocused || textFieldFocusNode.hasFocus;
-    final color = isFocusedOrHovered
+    final isFocusedOrHovered = isHovered || isFocused;
+    final color = isFocusedOrHovered || textFieldFocusNode.hasFocus
         ? AFThemeExtension.of(context).lightGreyHover
         : Colors.transparent;
     return FocusableActionDetector(
       focusNode: focusNode,
-      onShowHoverHighlight: (value) => setState(() {
-        isHovered = value;
-      }),
-      onFocusChange: (value) => setState(() {
-        isFocused = value;
-      }),
+      onShowHoverHighlight: (value) => setState(() => isHovered = value),
+      onFocusChange: (value) => setState(() => isFocused = value),
       actions: _buildActions(),
-      shortcuts: selectTaskShortcut,
+      shortcuts: _buildShortcuts(),
       child: Container(
-        constraints: BoxConstraints(
-          minHeight: GridSize.popoverItemHeight,
-        ),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: Corners.s6Border,
-        ),
-        child: _buildChild(
-          context,
-          isFocusedOrHovered,
-        ),
+        constraints: BoxConstraints(minHeight: GridSize.popoverItemHeight),
+        decoration: BoxDecoration(color: color, borderRadius: Corners.s6Border),
+        child: _buildChild(isFocusedOrHovered && !textFieldFocusNode.hasFocus),
       ),
     );
   }
 
-  Widget _buildChild(BuildContext context, bool isFocusedOrHovered) {
+  Widget _buildChild(bool showTrash) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        ReorderableDragStartListener(
+          index: widget.index,
+          child: MouseRegion(
+            cursor: Platform.isWindows
+                ? SystemMouseCursors.click
+                : SystemMouseCursors.grab,
+            child: SizedBox(
+              width: 20,
+              height: 32,
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FlowySvg(
+                  FlowySvgs.drag_element_s,
+                  size: const Size.square(14),
+                  color: AFThemeExtension.of(context).onBackground,
+                ),
+              ),
+            ),
+          ),
+        ),
         ChecklistCellCheckIcon(task: widget.task),
         Expanded(
           child: ChecklistCellTextfield(
             textController: textController,
             focusNode: textFieldFocusNode,
-            autofocus: widget.autofocus,
+            lineHeight: Platform.isWindows ? 1.2 : 1.1,
             onChanged: () {
               _debounceOnChanged.call(() {
-                if (textController.selection.isCollapsed) {
+                if (!isComposing) {
                   _submitUpdateTaskDescription(textController.text);
                 }
               });
@@ -260,14 +299,30 @@ class _ChecklistItemState extends State<ChecklistItem> {
             },
           ),
         ),
-        if (isFocusedOrHovered)
+        if (showTrash)
           ChecklistCellDeleteButton(
-            onPressed: () => context.read<ChecklistCellBloc>().add(
-                  ChecklistCellEvent.deleteTask(widget.task.data.id),
-                ),
+            onPressed: () => context
+                .read<ChecklistCellBloc>()
+                .add(ChecklistCellEvent.deleteTask(widget.task.data.id)),
           ),
       ],
     );
+  }
+
+  Map<ShortcutActivator, Intent> _buildShortcuts() {
+    return {
+      SingleActivator(
+        LogicalKeyboardKey.enter,
+        meta: Platform.isMacOS,
+        control: !Platform.isMacOS,
+      ): const _SelectTaskIntent(),
+      if (!isComposing)
+        const SingleActivator(LogicalKeyboardKey.enter):
+            const _UpdateTaskDescriptionIntent(),
+      if (!isComposing)
+        const SingleActivator(LogicalKeyboardKey.escape):
+            const _EndEditingTaskIntent(),
+    };
   }
 
   Map<Type, Action<Intent>> _buildActions() {
@@ -280,6 +335,14 @@ class _ChecklistItemState extends State<ChecklistItem> {
           return;
         },
       ),
+      _UpdateTaskDescriptionIntent:
+          CallbackAction<_UpdateTaskDescriptionIntent>(
+        onInvoke: (_UpdateTaskDescriptionIntent intent) {
+          textFieldFocusNode.unfocus();
+          widget.onSubmitted?.call();
+          return;
+        },
+      ),
       _EndEditingTaskIntent: CallbackAction<_EndEditingTaskIntent>(
         onInvoke: (_EndEditingTaskIntent intent) {
           textFieldFocusNode.unfocus();
@@ -289,14 +352,9 @@ class _ChecklistItemState extends State<ChecklistItem> {
     };
   }
 
-  void _submitUpdateTaskDescription(String description) {
-    context.read<ChecklistCellBloc>().add(
-          ChecklistCellEvent.updateTaskName(
-            widget.task.data,
-            description,
-          ),
-        );
-  }
+  void _submitUpdateTaskDescription(String description) => context
+      .read<ChecklistCellBloc>()
+      .add(ChecklistCellEvent.updateTaskName(widget.task.data, description));
 }
 
 /// Creates a new task after entering the description and pressing enter.
@@ -312,19 +370,27 @@ class NewTaskItem extends StatefulWidget {
 }
 
 class _NewTaskItemState extends State<NewTaskItem> {
-  final _textEditingController = TextEditingController();
+  final textController = TextEditingController();
+
+  bool isCreateButtonEnabled = false;
+  bool isComposing = false;
 
   @override
   void initState() {
     super.initState();
+    textController.addListener(_onTextChanged);
     if (widget.focusNode.canRequestFocus) {
       widget.focusNode.requestFocus();
     }
   }
 
+  void _onTextChanged() =>
+      setState(() => isComposing = !textController.value.composing.isCollapsed);
+
   @override
   void dispose() {
-    _textEditingController.dispose();
+    textController.removeListener(_onTextChanged);
+    textController.dispose();
     super.dispose();
   }
 
@@ -337,56 +403,68 @@ class _NewTaskItemState extends State<NewTaskItem> {
         children: [
           const HSpace(8),
           Expanded(
-            child: TextField(
-              focusNode: widget.focusNode,
-              controller: _textEditingController,
-              style: Theme.of(context).textTheme.bodyMedium,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  vertical: 6.0,
-                  horizontal: 2.0,
+            child: CallbackShortcuts(
+              bindings: isComposing
+                  ? const {}
+                  : {
+                      const SingleActivator(LogicalKeyboardKey.enter): () =>
+                          _createNewTask(context),
+                    },
+              child: TextField(
+                focusNode: widget.focusNode,
+                controller: textController,
+                style: Theme.of(context).textTheme.bodyMedium,
+                maxLines: null,
+                decoration: InputDecoration(
+                  border: InputBorder.none,
+                  isCollapsed: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 6.0,
+                    horizontal: 2.0,
+                  ),
+                  hintText: LocaleKeys.grid_checklist_addNew.tr(),
                 ),
-                hintText: LocaleKeys.grid_checklist_addNew.tr(),
+                onSubmitted: (_) => _createNewTask(context),
+                onChanged: (_) => setState(
+                  () => isCreateButtonEnabled = textController.text.isNotEmpty,
+                ),
               ),
-              onSubmitted: (taskDescription) {
-                if (taskDescription.isNotEmpty) {
-                  context
-                      .read<ChecklistCellBloc>()
-                      .add(ChecklistCellEvent.createNewTask(taskDescription));
-                  _textEditingController.clear();
-                }
-                widget.focusNode.requestFocus();
-              },
-              onChanged: (value) => setState(() {}),
             ),
           ),
           FlowyTextButton(
             LocaleKeys.grid_checklist_submitNewTask.tr(),
             fontSize: 11,
-            fillColor: _textEditingController.text.isEmpty
-                ? Theme.of(context).disabledColor
-                : Theme.of(context).colorScheme.primary,
-            hoverColor: _textEditingController.text.isEmpty
-                ? Theme.of(context).disabledColor
-                : Theme.of(context).colorScheme.primaryContainer,
+            fillColor: isCreateButtonEnabled
+                ? Theme.of(context).colorScheme.primary
+                : Theme.of(context).disabledColor,
+            hoverColor: isCreateButtonEnabled
+                ? Theme.of(context).colorScheme.primaryContainer
+                : Theme.of(context).disabledColor,
             fontColor: Theme.of(context).colorScheme.onPrimary,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            onPressed: _textEditingController.text.isEmpty
-                ? null
-                : () {
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            onPressed: isCreateButtonEnabled
+                ? () {
                     context.read<ChecklistCellBloc>().add(
-                          ChecklistCellEvent.createNewTask(
-                            _textEditingController.text,
-                          ),
+                          ChecklistCellEvent.createNewTask(textController.text),
                         );
                     widget.focusNode.requestFocus();
-                    _textEditingController.clear();
-                  },
+                    textController.clear();
+                  }
+                : null,
           ),
         ],
       ),
     );
+  }
+
+  void _createNewTask(BuildContext context) {
+    final taskDescription = textController.text;
+    if (taskDescription.isNotEmpty) {
+      context
+          .read<ChecklistCellBloc>()
+          .add(ChecklistCellEvent.createNewTask(taskDescription));
+      textController.clear();
+    }
+    widget.focusNode.requestFocus();
   }
 }

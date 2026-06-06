@@ -1,5 +1,5 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/mobile/presentation/home/mobile_folders.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
 import 'package:appflowy/workspace/presentation/home/home_sizes.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:flutter/material.dart';
@@ -25,19 +25,17 @@ class _MobileHomeSpaceState extends State<MobileHomeSpace>
     final workspaceId =
         context.read<UserWorkspaceBloc>().state.currentWorkspace?.workspaceId ??
             '';
-    return Scrollbar(
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: EdgeInsets.only(
-            top: HomeSpaceViewSizes.mVerticalPadding,
-            bottom: HomeSpaceViewSizes.mVerticalPadding +
-                MediaQuery.of(context).padding.bottom,
-          ),
-          child: MobileFolders(
-            user: widget.userProfile,
-            workspaceId: workspaceId,
-            showFavorite: false,
-          ),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.only(
+          top: HomeSpaceViewSizes.mVerticalPadding,
+          bottom: HomeSpaceViewSizes.mVerticalPadding +
+              MediaQuery.of(context).padding.bottom,
+        ),
+        child: MobileFolders(
+          user: widget.userProfile,
+          workspaceId: workspaceId,
+          showFavorite: false,
         ),
       ),
     );

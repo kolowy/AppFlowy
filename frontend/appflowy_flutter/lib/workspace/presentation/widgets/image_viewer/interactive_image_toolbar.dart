@@ -1,23 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
-
 import 'package:appflowy/core/helpers/url_launcher.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/common.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/user_profile.pb.dart';
-import 'package:appflowy_editor/appflowy_editor.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/file_picker/file_picker_impl.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flowy_infra_ui/style_widget/hover.dart';
 import 'package:flowy_infra_ui/style_widget/snap_bar.dart';
-import 'package:flowy_infra_ui/widget/flowy_tooltip.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 class InteractiveImageToolbar extends StatelessWidget {
   const InteractiveImageToolbar({
@@ -122,7 +119,7 @@ class InteractiveImageToolbar extends StatelessWidget {
                       child: FlowyHover(
                         resetHoverOnRebuild: false,
                         style: HoverStyle(
-                          hoverColor: Colors.white.withOpacity(0.1),
+                          hoverColor: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Padding(
@@ -165,7 +162,7 @@ class InteractiveImageToolbar extends StatelessWidget {
                         Navigator.of(context).pop();
                       },
                     ),
-                  if (!PlatformExtension.isMobile) ...[
+                  if (!UniversalPlatform.isMobile) ...[
                     _ToolbarItem(
                       tooltip: currentImage.isNotInternal
                           ? LocaleKeys
@@ -178,7 +175,7 @@ class InteractiveImageToolbar extends StatelessWidget {
                           ? currentImage.isLocal
                               ? FlowySvgs.folder_m
                               : FlowySvgs.m_aa_link_s
-                          : FlowySvgs.import_s,
+                          : FlowySvgs.download_s,
                       onTap: () => _locateOrDownloadImage(context),
                     ),
                   ],
@@ -207,7 +204,7 @@ class InteractiveImageToolbar extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        color: Colors.black.withOpacity(0.6),
+        color: Colors.black.withValues(alpha: 0.6),
       ),
       child: Padding(
         padding: const EdgeInsets.all(4),
@@ -221,14 +218,13 @@ class InteractiveImageToolbar extends StatelessWidget {
   }
 
   Future<void> _locateOrDownloadImage(BuildContext context) async {
-    if (currentImage.isLocal) {
+    if (currentImage.isLocal || currentImage.isNotInternal) {
       /// If the image type is local, we simply open the image
-      await afLaunchUrl(Uri.file(currentImage.url));
-    } else if (currentImage.isNotInternal) {
-      // In case of eg. Unsplash images (images without extension type in URL),
+      ///
+      /// // In case of eg. Unsplash images (images without extension type in URL),
       // we don't know their mimetype. In the future we can write a parser
       // using the Mime package and read the image to get the proper extension.
-      await afLaunchUrl(Uri.parse(currentImage.url));
+      await afLaunchUrlString(currentImage.url);
     } else {
       if (userProfile == null) {
         return showSnapBar(
@@ -288,8 +284,9 @@ class _ToolbarItem extends StatelessWidget {
         child: FlowyHover(
           resetHoverOnRebuild: false,
           style: HoverStyle(
-            hoverColor:
-                isDisabled ? Colors.transparent : Colors.white.withOpacity(0.1),
+            hoverColor: isDisabled
+                ? Colors.transparent
+                : Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Container(

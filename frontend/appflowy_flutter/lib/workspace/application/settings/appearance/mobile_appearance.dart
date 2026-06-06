@@ -28,13 +28,12 @@ class MobileAppearance extends BaseAppearance {
       fontWeight: FontWeight.w400,
     );
 
+    final isLight = brightness == Brightness.light;
     final codeFontStyle = getFontStyle(fontFamily: codeFontFamily);
 
-    final theme = brightness == Brightness.light
-        ? appTheme.lightTheme
-        : appTheme.darkTheme;
+    final theme = isLight ? appTheme.lightTheme : appTheme.darkTheme;
 
-    final colorTheme = brightness == Brightness.light
+    final colorTheme = isLight
         ? ColorScheme(
             brightness: brightness,
             primary: _primaryColor,
@@ -49,11 +48,11 @@ class MobileAppearance extends BaseAppearance {
             error: const Color(0xffFB006D),
             onError: const Color(0xffFB006D),
             outline: const Color(0xffe3e3e3),
-            outlineVariant: const Color(0xffCBD5E0).withOpacity(0.24),
+            outlineVariant: const Color(0xffCBD5E0).withValues(alpha: 0.24),
             //Snack bar
             surface: Colors.white,
             onSurface: _onSurfaceColor, // text/body color
-            surfaceContainerHighest: const Color.fromARGB(255, 216, 216, 216),
+            surfaceContainerHighest: theme.sidebarBg,
           )
         : ColorScheme(
             brightness: brightness,
@@ -69,14 +68,11 @@ class MobileAppearance extends BaseAppearance {
             //Snack bar
             surface: const Color(0xFF171A1F),
             onSurface: const Color(0xffC5C6C7), // text/body color
+            surfaceContainerHighest: theme.sidebarBg,
           );
-    final hintColor = brightness == Brightness.light
-        ? const Color(0x991F2329)
-        : _hintColorInDarkMode;
-    final onBackground =
-        brightness == Brightness.light ? _onBackgroundColor : Colors.white;
-    final background =
-        brightness == Brightness.light ? Colors.white : const Color(0xff121212);
+    final hintColor = isLight ? const Color(0x991F2329) : _hintColorInDarkMode;
+    final onBackground = isLight ? _onBackgroundColor : Colors.white;
+    final background = isLight ? Colors.white : const Color(0xff121212);
 
     return ThemeData(
       useMaterial3: false,
@@ -278,6 +274,8 @@ class MobileAppearance extends BaseAppearance {
           borderColor: theme.borderColor,
           scrollbarColor: theme.scrollbarColor,
           scrollbarHoverColor: theme.scrollbarHoverColor,
+          lightIconColor: theme.lightIconColor,
+          toolbarHoverColor: theme.toolbarHoverColor,
         ),
         ToolbarColorExtension.fromBrightness(brightness),
       ],

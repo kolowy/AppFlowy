@@ -1,3 +1,6 @@
+import 'package:appflowy/features/share_tab/data/repositories/rust_share_with_user_repository_impl.dart';
+import 'package:appflowy/features/share_tab/logic/share_tab_bloc.dart';
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/database/application/tab_bar_bloc.dart';
 import 'package:appflowy/plugins/shared/share/_shared.dart';
@@ -8,6 +11,7 @@ import 'package:appflowy/workspace/application/view/view_ext.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_backend/protobuf/flowy-error/errors.pb.dart';
 import 'package:appflowy_backend/protobuf/flowy-folder/view.pb.dart';
+import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,6 +26,10 @@ class ShareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final workspaceBloc = context.read<UserWorkspaceBloc>();
+    final workspaceId = workspaceBloc.state.currentWorkspace?.workspaceId ?? '';
+    final workspaceType = workspaceBloc.state.currentWorkspace?.workspaceType;
+
     return MultiBlocProvider(
       providers: [
         BlocProvider(
@@ -30,9 +38,27 @@ class ShareButton extends StatelessWidget {
         ),
         if (view.layout.isDatabaseView)
           BlocProvider(
-            create: (context) => DatabaseTabBarBloc(view: view)
-              ..add(const DatabaseTabBarEvent.initial()),
+            create: (context) => DatabaseTabBarBloc(
+              view: view,
+              compactModeId: view.id,
+              enableCompactMode: false,
+            )..add(const DatabaseTabBarEvent.initial()),
           ),
+        BlocProvider(
+          create: (context) {
+            final bloc = ShareTabBloc(
+              repository: RustShareWithUserRepositoryImpl(),
+              pageId: view.id,
+              workspaceId: workspaceId,
+            );
+
+            if (workspaceType != WorkspaceTypePB.LocalW) {
+              bloc.add(ShareTabEvent.initialize());
+            }
+
+            return bloc;
+          },
+        ),
       ],
       child: BlocListener<ShareBloc, ShareState>(
         listener: (context, state) {
@@ -46,7 +72,11 @@ class ShareButton extends StatelessWidget {
         child: BlocBuilder<ShareBloc, ShareState>(
           builder: (context, state) {
             final tabs = [
-              if (state.enablePublish) ShareMenuTab.publish,
+              if (state.enablePublish) ...[
+                // share the same permission with publish
+                ShareMenuTab.share,
+                ShareMenuTab.publish,
+              ],
               ShareMenuTab.exportAs,
             ];
 
@@ -63,7 +93,6 @@ class ShareButton extends StatelessWidget {
       case ShareType.html:
       case ShareType.csv:
         showToastNotification(
-          context,
           message: LocaleKeys.settings_files_exportFileSuccess.tr(),
         );
         break;
@@ -74,7 +103,6 @@ class ShareButton extends StatelessWidget {
 
   void _handleExportError(BuildContext context, FlowyError error) {
     showToastNotification(
-      context,
       message:
           '${LocaleKeys.settings_files_exportFileFail.tr()}: ${error.code}',
     );

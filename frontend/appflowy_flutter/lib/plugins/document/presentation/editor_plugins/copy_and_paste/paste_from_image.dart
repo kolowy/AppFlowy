@@ -6,27 +6,23 @@ import 'package:appflowy/plugins/document/application/document_bloc.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/common.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/custom_image_block_component/custom_image_block_component.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/image_util.dart';
-import 'package:appflowy/shared/patterns/common_patterns.dart';
+import 'package:appflowy/shared/patterns/file_type_patterns.dart';
 import 'package:appflowy/startup/startup.dart';
+import 'package:appflowy/util/default_extensions.dart';
 import 'package:appflowy/workspace/application/settings/application_data_storage.dart';
-import 'package:appflowy/workspace/presentation/home/toast.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy_backend/log.dart';
-import 'package:appflowy_editor/appflowy_editor.dart' hide Log;
+import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:cross_file/cross_file.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra/uuid.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:universal_platform/universal_platform.dart';
 
 extension PasteFromImage on EditorState {
-  static final supportedImageFormats = [
-    'png',
-    'jpeg',
-    'gif',
-  ];
-
   Future<void> dropImages(
-    Node dropNode,
+    List<int> dropPath,
     List<XFile> files,
     String documentId,
     bool isLocalMode,
@@ -34,7 +30,7 @@ extension PasteFromImage on EditorState {
     final imageFiles = files.where(
       (file) =>
           file.mimeType?.startsWith('image/') ??
-          false || imgExtensionRegex.hasMatch(file.name),
+          false || imgExtensionRegex.hasMatch(file.name.toLowerCase()),
     );
 
     for (final file in imageFiles) {
@@ -54,7 +50,7 @@ extension PasteFromImage on EditorState {
 
       final t = transaction
         ..insertNode(
-          dropNode.path,
+          dropPath,
           customImageNode(url: path, type: type),
         );
       await apply(t);
@@ -64,15 +60,22 @@ extension PasteFromImage on EditorState {
   Future<bool> pasteImage(
     String format,
     Uint8List imageBytes,
-    String documentId,
-  ) async {
-    if (!supportedImageFormats.contains(format)) {
-      return false;
-    }
-
+    String documentId, {
+    Selection? selection,
+  }) async {
     final context = document.root.context;
 
     if (context == null) {
+      return false;
+    }
+
+    if (!defaultImageExtensions.contains(format)) {
+      Log.info('unsupported format: $format');
+      if (UniversalPlatform.isMobile) {
+        showToastNotification(
+          message: LocaleKeys.document_imageBlock_error_invalidImageFormat.tr(),
+        );
+      }
       return false;
     }
 
@@ -97,40 +100,85 @@ extension PasteFromImage on EditorState {
       await File(copyToPath).writeAsBytes(imageBytes);
       final String? path;
 
+      CustomImageType type;
       if (isLocalMode) {
         path = await saveImageToLocalStorage(copyToPath);
+        type = CustomImageType.local;
       } else {
         final result = await saveImageToCloudStorage(copyToPath, documentId);
 
         final errorMessage = result.$2;
 
         if (errorMessage != null && context.mounted) {
-          showSnackBarMessage(
-            context,
-            errorMessage,
+          showToastNotification(
+            message: errorMessage,
           );
           return false;
         }
 
         path = result.$1;
+        type = CustomImageType.internal;
       }
 
       if (path != null) {
-        await insertImageNode(path);
+        await insertImageNode(path, selection: selection, type: type);
       }
 
-      await File(copyToPath).delete();
       return true;
     } catch (e) {
       Log.error('cannot copy image file', e);
       if (context.mounted) {
-        showSnackBarMessage(
-          context,
-          LocaleKeys.document_imageBlock_error_invalidImage.tr(),
+        showToastNotification(
+          message: LocaleKeys.document_imageBlock_error_invalidImage.tr(),
         );
       }
     }
 
     return false;
+  }
+
+  Future<void> insertImageNode(
+    String src, {
+    Selection? selection,
+    required CustomImageType type,
+  }) async {
+    selection ??= this.selection;
+    if (selection == null || !selection.isCollapsed) {
+      return;
+    }
+    final node = getNodeAtPath(selection.end.path);
+    if (node == null) {
+      return;
+    }
+    final transaction = this.transaction;
+    // if the current node is empty paragraph, replace it with image node
+    if (node.type == ParagraphBlockKeys.type &&
+        (node.delta?.isEmpty ?? false)) {
+      transaction
+        ..insertNode(
+          node.path,
+          customImageNode(
+            url: src,
+            type: type,
+          ),
+        )
+        ..deleteNode(node);
+    } else {
+      transaction.insertNode(
+        node.path.next,
+        customImageNode(
+          url: src,
+          type: type,
+        ),
+      );
+    }
+
+    transaction.afterSelection = Selection.collapsed(
+      Position(
+        path: node.path.next,
+      ),
+    );
+
+    return apply(transaction);
   }
 }

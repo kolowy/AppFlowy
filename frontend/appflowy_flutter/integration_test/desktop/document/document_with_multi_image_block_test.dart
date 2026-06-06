@@ -1,16 +1,11 @@
 import 'dart:io';
 
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
 import 'package:appflowy/core/config/kv.dart';
 import 'package:appflowy/core/config/kv_keys.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/multi_image_block_component/image_render.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/multi_image_block_component/layouts/image_browser_layout.dart';
-import 'package:appflowy/plugins/document/presentation/editor_plugins/image/multi_image_block_component/multi_image_block_component.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/multi_image_block_component/multi_image_placeholder.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/upload_image_menu/upload_image_menu.dart';
 import 'package:appflowy/plugins/document/presentation/editor_plugins/image/upload_image_menu/widgets/embed_image_url_widget.dart';
@@ -20,6 +15,9 @@ import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/workspace/presentation/widgets/image_viewer/interactive_image_toolbar.dart';
 import 'package:appflowy/workspace/presentation/widgets/image_viewer/interactive_image_viewer.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
@@ -27,7 +25,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../shared/mock/mock_file_picker.dart';
 import '../../shared/util.dart';
-import '../board/board_hide_groups_test.dart';
 
 void main() {
   setUp(() {
@@ -49,7 +46,10 @@ void main() {
       // tap the first line of the document
       await tester.editor.tapLineOfEditorAt(0);
       await tester.editor.showSlashMenu();
-      await tester.editor.tapSlashMenuItemWithName('Photo gallery');
+      await tester.editor.tapSlashMenuItemWithName(
+        LocaleKeys.document_slashMenu_name_photoGallery.tr(),
+        offset: 100,
+      );
       expect(find.byType(MultiImageBlockComponent), findsOneWidget);
       expect(find.byType(MultiImagePlaceholder), findsOneWidget);
 
@@ -144,7 +144,10 @@ void main() {
       // tap the first line of the document
       await tester.editor.tapLineOfEditorAt(0);
       await tester.editor.showSlashMenu();
-      await tester.editor.tapSlashMenuItemWithName('Photo gallery');
+      await tester.editor.tapSlashMenuItemWithName(
+        LocaleKeys.document_slashMenu_name_photoGallery.tr(),
+        offset: 100,
+      );
       expect(find.byType(MultiImageBlockComponent), findsOneWidget);
       expect(find.byType(MultiImagePlaceholder), findsOneWidget);
 

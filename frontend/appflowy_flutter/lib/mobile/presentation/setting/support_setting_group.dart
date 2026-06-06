@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:appflowy/core/helpers/url_launcher.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/mobile/presentation/bottom_sheet/show_mobile_bottom_sheet.dart';
+import 'package:appflowy/mobile/presentation/setting/widgets/mobile_setting_trailing.dart';
 import 'package:appflowy/mobile/presentation/widgets/widgets.dart';
 import 'package:appflowy/shared/appflowy_cache_manager.dart';
 import 'package:appflowy/startup/startup.dart';
 import 'package:appflowy/util/share_log_files.dart';
-import 'package:appflowy/workspace/presentation/home/toast.dart';
+import 'package:appflowy/workspace/presentation/settings/pages/fix_data_widget.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
@@ -29,15 +31,15 @@ class SupportSettingGroup extends StatelessWidget {
         settingItemList: [
           MobileSettingItem(
             name: LocaleKeys.settings_mobile_joinDiscord.tr(),
-            trailing: const Icon(
-              Icons.chevron_right,
+            trailing: MobileSettingTrailing(
+              text: '',
             ),
             onTap: () => afLaunchUrlString('https://discord.gg/JucBXeU2FE'),
           ),
           MobileSettingItem(
             name: LocaleKeys.workspace_errorActions_reportIssue.tr(),
-            trailing: const Icon(
-              Icons.chevron_right,
+            trailing: MobileSettingTrailing(
+              text: '',
             ),
             onTap: () {
               showMobileBottomSheet(
@@ -56,8 +58,8 @@ class SupportSettingGroup extends StatelessWidget {
           ),
           MobileSettingItem(
             name: LocaleKeys.settings_files_clearCache.tr(),
-            trailing: const Icon(
-              Icons.chevron_right,
+            trailing: MobileSettingTrailing(
+              text: '',
             ),
             onTap: () async {
               await showFlowyMobileConfirmDialog(
@@ -74,10 +76,13 @@ class SupportSettingGroup extends StatelessWidget {
                 actionButtonTitle: LocaleKeys.button_yes.tr(),
                 onActionButtonPressed: () async {
                   await getIt<FlowyCacheManager>().clearAllCache();
+                  // check the workspace and space health
+                  await WorkspaceDataManager.checkViewHealth(
+                    dryRun: false,
+                  );
                   if (context.mounted) {
-                    showSnackBarMessage(
-                      context,
-                      LocaleKeys.settings_files_clearCacheSuccess.tr(),
+                    showToastNotification(
+                      message: LocaleKeys.settings_files_clearCacheSuccess.tr(),
                     );
                   }
                 },

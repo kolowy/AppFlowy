@@ -207,6 +207,22 @@ impl FolderTest {
       },
     }
   }
+
+  //   pub async fn duplicate_view(&self, view_id: &str) {
+  //     let payload = DuplicateViewPayloadPB {
+  //       view_id: view_id.to_string(),
+  //       open_after_duplicate: false,
+  //       include_children: false,
+  //       parent_view_id: None,
+  //       suffix: None,
+  //       sync_after_create: false,
+  //     };
+  //     EventBuilder::new(self.sdk.clone())
+  //       .event(DuplicateView)
+  //       .payload(payload)
+  //       .async_send()
+  //       .await;
+  //   }
 }
 pub async fn create_workspace(sdk: &EventIntegrationTest, name: &str, desc: &str) -> WorkspacePB {
   let request = CreateWorkspacePayloadPB {
@@ -219,7 +235,7 @@ pub async fn create_workspace(sdk: &EventIntegrationTest, name: &str, desc: &str
     .payload(request)
     .async_send()
     .await
-    .parse::<WorkspacePB>()
+    .parse_or_panic::<WorkspacePB>()
 }
 
 pub async fn read_workspace(sdk: &EventIntegrationTest, workspace_id: String) -> WorkspacePB {
@@ -231,20 +247,19 @@ pub async fn read_workspace(sdk: &EventIntegrationTest, workspace_id: String) ->
     .payload(request.clone())
     .async_send()
     .await
-    .parse::<WorkspacePB>()
+    .parse_or_panic::<WorkspacePB>()
 }
 
 pub async fn create_view(
   sdk: &EventIntegrationTest,
   parent_view_id: &str,
   name: &str,
-  desc: &str,
+  _desc: &str,
   layout: ViewLayout,
 ) -> ViewPB {
   let request = CreateViewPayloadPB {
     parent_view_id: parent_view_id.to_string(),
     name: name.to_string(),
-    desc: desc.to_string(),
     thumbnail: None,
     layout: layout.into(),
     initial_data: vec![],
@@ -260,17 +275,19 @@ pub async fn create_view(
     .payload(request)
     .async_send()
     .await
-    .parse::<ViewPB>()
+    .parse_or_panic::<ViewPB>()
 }
 
 pub async fn read_view(sdk: &EventIntegrationTest, view_id: &str) -> ViewPB {
-  let view_id = ViewIdPB::from(view_id);
+  let view_id = ViewIdPB {
+    value: view_id.to_string(),
+  };
   EventBuilder::new(sdk.clone())
     .event(GetView)
     .payload(view_id)
     .async_send()
     .await
-    .parse::<ViewPB>()
+    .parse_or_panic::<ViewPB>()
 }
 
 pub async fn move_view(
@@ -343,7 +360,7 @@ pub async fn read_trash(sdk: &EventIntegrationTest) -> RepeatedTrashPB {
     .event(ListTrashItems)
     .async_send()
     .await
-    .parse::<RepeatedTrashPB>()
+    .parse_or_panic::<RepeatedTrashPB>()
 }
 
 pub async fn restore_app_from_trash(sdk: &EventIntegrationTest, app_id: &str) {
@@ -389,5 +406,5 @@ pub async fn read_favorites(sdk: &EventIntegrationTest) -> RepeatedFavoriteViewP
     .event(ReadFavorites)
     .async_send()
     .await
-    .parse::<RepeatedFavoriteViewPB>()
+    .parse_or_panic::<RepeatedFavoriteViewPB>()
 }

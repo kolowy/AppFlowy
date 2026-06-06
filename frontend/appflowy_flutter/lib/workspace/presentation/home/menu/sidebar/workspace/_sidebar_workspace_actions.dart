@@ -1,12 +1,12 @@
+import 'package:appflowy/features/workspace/logic/workspace_bloc.dart';
 import 'package:appflowy/generated/flowy_svgs.g.dart';
 import 'package:appflowy/generated/locale_keys.g.dart';
 import 'package:appflowy/shared/af_role_pb_extension.dart';
-import 'package:appflowy/workspace/application/user/user_workspace_bloc.dart';
 import 'package:appflowy/workspace/presentation/settings/widgets/members/workspace_member_bloc.dart';
+import 'package:appflowy/workspace/presentation/widgets/dialog_v2.dart';
 import 'package:appflowy/workspace/presentation/widgets/dialogs.dart';
 import 'package:appflowy/workspace/presentation/widgets/pop_up_action.dart';
 import 'package:appflowy_backend/protobuf/flowy-user/protobuf.dart';
-import 'package:appflowy_popover/appflowy_popover.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
@@ -19,13 +19,23 @@ enum WorkspaceMoreAction {
   divider,
 }
 
-class WorkspaceMoreActionList extends StatelessWidget {
+class WorkspaceMoreActionList extends StatefulWidget {
   const WorkspaceMoreActionList({
     super.key,
     required this.workspace,
+    required this.popoverMutex,
   });
 
   final UserWorkspacePB workspace;
+  final PopoverMutex popoverMutex;
+
+  @override
+  State<WorkspaceMoreActionList> createState() =>
+      _WorkspaceMoreActionListState();
+}
+
+class _WorkspaceMoreActionListState extends State<WorkspaceMoreActionList> {
+  bool isPopoverOpen = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,9 +54,22 @@ class WorkspaceMoreActionList extends StatelessWidget {
     return PopoverActionList<_WorkspaceMoreActionWrapper>(
       direction: PopoverDirection.bottomWithLeftAligned,
       actions: actions
-          .map((e) => _WorkspaceMoreActionWrapper(e, workspace))
+          .map(
+            (action) => _WorkspaceMoreActionWrapper(
+              action,
+              widget.workspace,
+              () => PopoverContainer.of(context).closeAll(),
+            ),
+          )
           .toList(),
+      mutex: widget.popoverMutex,
       constraints: const BoxConstraints(minWidth: 220),
+      animationDuration: Durations.short3,
+      slideDistance: 2,
+      beginScaleFactor: 1.0,
+      beginOpacity: 0.8,
+      onClosed: () => isPopoverOpen = false,
+      asBarrier: true,
       buildChild: (controller) {
         return SizedBox.square(
           dimension: 24.0,
@@ -56,7 +79,10 @@ class WorkspaceMoreActionList extends StatelessWidget {
               FlowySvgs.workspace_three_dots_s,
             ),
             onTap: () {
-              controller.show();
+              if (!isPopoverOpen) {
+                controller.show();
+                isPopoverOpen = true;
+              }
             },
           ),
         );
@@ -67,13 +93,22 @@ class WorkspaceMoreActionList extends StatelessWidget {
 }
 
 class _WorkspaceMoreActionWrapper extends CustomActionCell {
-  _WorkspaceMoreActionWrapper(this.inner, this.workspace);
+  _WorkspaceMoreActionWrapper(
+    this.inner,
+    this.workspace,
+    this.closeWorkspaceMenu,
+  );
 
   final WorkspaceMoreAction inner;
   final UserWorkspacePB workspace;
+  final VoidCallback closeWorkspaceMenu;
 
   @override
-  Widget buildWithContext(BuildContext context, PopoverController controller) {
+  Widget buildWithContext(
+    BuildContext context,
+    PopoverController controller,
+    PopoverMutex? mutex,
+  ) {
     if (inner == WorkspaceMoreAction.divider) {
       return const Divider();
     }
@@ -85,20 +120,23 @@ class _WorkspaceMoreActionWrapper extends CustomActionCell {
     BuildContext context,
     PopoverController controller,
   ) {
-    return FlowyButton(
-      leftIcon: buildLeftIcon(context),
+    return FlowyIconTextButton(
+      leftIconBuilder: (onHover) => buildLeftIcon(context, onHover),
       iconPadding: 10.0,
-      text: FlowyText.regular(
+      textBuilder: (onHover) => FlowyText.regular(
         name,
         fontSize: 14.0,
+        figmaLineHeight: 18.0,
         color: [WorkspaceMoreAction.delete, WorkspaceMoreAction.leave]
-                .contains(inner)
+                    .contains(inner) &&
+                onHover
             ? Theme.of(context).colorScheme.error
             : null,
       ),
       margin: const EdgeInsets.all(6),
       onTap: () async {
         PopoverContainer.of(context).closeAll();
+        closeWorkspaceMenu();
 
         final workspaceBloc = context.read<UserWorkspaceBloc>();
         switch (inner) {
@@ -111,37 +149,41 @@ class _WorkspaceMoreActionWrapper extends CustomActionCell {
               description: LocaleKeys.workspace_deleteWorkspaceHintText.tr(),
               onConfirm: () {
                 workspaceBloc.add(
-                  UserWorkspaceEvent.deleteWorkspace(workspace.workspaceId),
+                  UserWorkspaceEvent.deleteWorkspace(
+                    workspaceId: workspace.workspaceId,
+                  ),
                 );
               },
             );
           case WorkspaceMoreAction.rename:
-            await NavigatorTextFieldDialog(
+            await showAFTextFieldDialog(
+              context: context,
               title: LocaleKeys.workspace_renameWorkspace.tr(),
-              value: workspace.name,
+              initialValue: workspace.name,
               hintText: '',
-              autoSelectAllText: true,
-              onConfirm: (name, context) async {
+              onConfirm: (name) async {
                 workspaceBloc.add(
                   UserWorkspaceEvent.renameWorkspace(
-                    workspace.workspaceId,
-                    name,
+                    workspaceId: workspace.workspaceId,
+                    name: name,
                   ),
                 );
               },
-            ).show(context);
+            );
           case WorkspaceMoreAction.leave:
-            await showDialog(
+            await showConfirmDialog(
               context: context,
-              builder: (_) => NavigatorOkCancelDialog(
-                message: LocaleKeys.workspace_leaveCurrentWorkspacePrompt.tr(),
-                onOkPressed: () {
-                  workspaceBloc.add(
-                    UserWorkspaceEvent.leaveWorkspace(workspace.workspaceId),
-                  );
-                },
-                okTitle: LocaleKeys.button_yes.tr(),
-              ),
+              title: LocaleKeys.workspace_leaveCurrentWorkspace.tr(),
+              description:
+                  LocaleKeys.workspace_leaveCurrentWorkspacePrompt.tr(),
+              confirmLabel: LocaleKeys.button_yes.tr(),
+              onConfirm: (_) {
+                workspaceBloc.add(
+                  UserWorkspaceEvent.leaveWorkspace(
+                    workspaceId: workspace.workspaceId,
+                  ),
+                );
+              },
             );
         }
       },
@@ -161,19 +203,19 @@ class _WorkspaceMoreActionWrapper extends CustomActionCell {
     }
   }
 
-  Widget buildLeftIcon(BuildContext context) {
+  Widget buildLeftIcon(BuildContext context, bool onHover) {
     switch (inner) {
       case WorkspaceMoreAction.delete:
         return FlowySvg(
-          FlowySvgs.delete_s,
-          color: Theme.of(context).colorScheme.error,
+          FlowySvgs.trash_s,
+          color: onHover ? Theme.of(context).colorScheme.error : null,
         );
       case WorkspaceMoreAction.rename:
         return const FlowySvg(FlowySvgs.view_item_rename_s);
       case WorkspaceMoreAction.leave:
         return FlowySvg(
           FlowySvgs.logout_s,
-          color: Theme.of(context).colorScheme.error,
+          color: onHover ? Theme.of(context).colorScheme.error : null,
         );
       case WorkspaceMoreAction.divider:
         return const SizedBox.shrink();

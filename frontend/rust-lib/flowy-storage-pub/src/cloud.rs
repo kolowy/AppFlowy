@@ -2,8 +2,8 @@ use crate::storage::{CompletedPartRequest, CreateUploadResponse, UploadPartRespo
 use async_trait::async_trait;
 use bytes::Bytes;
 use flowy_error::{FlowyError, FlowyResult};
-use lib_infra::future::FutureResult;
 use mime::Mime;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait StorageCloudService: Send + Sync {
@@ -15,7 +15,7 @@ pub trait StorageCloudService: Send + Sync {
   /// # Returns
   /// - `Ok()`
   /// - `Err(Error)`: An error occurred during the operation.
-  fn get_object_url(&self, object_id: ObjectIdentity) -> FutureResult<String, FlowyError>;
+  async fn get_object_url(&self, object_id: ObjectIdentity) -> Result<String, FlowyError>;
 
   /// Creates a new storage object.
   ///
@@ -25,7 +25,7 @@ pub trait StorageCloudService: Send + Sync {
   /// # Returns
   /// - `Ok()`
   /// - `Err(Error)`: An error occurred during the operation.
-  fn put_object(&self, url: String, object_value: ObjectValue) -> FutureResult<(), FlowyError>;
+  async fn put_object(&self, url: String, object_value: ObjectValue) -> Result<(), FlowyError>;
 
   /// Deletes a storage object by its URL.
   ///
@@ -35,7 +35,7 @@ pub trait StorageCloudService: Send + Sync {
   /// # Returns
   /// - `Ok()`
   /// - `Err(Error)`: An error occurred during the operation.
-  fn delete_object(&self, url: &str) -> FutureResult<(), FlowyError>;
+  async fn delete_object(&self, url: &str) -> Result<(), FlowyError>;
 
   /// Fetches a storage object by its URL.
   ///
@@ -45,25 +45,29 @@ pub trait StorageCloudService: Send + Sync {
   /// # Returns
   /// - `Ok(File)`: The returned file object.
   /// - `Err(Error)`: An error occurred during the operation.
-  fn get_object(&self, url: String) -> FutureResult<ObjectValue, FlowyError>;
-  fn get_object_url_v1(
+  async fn get_object(&self, url: String) -> Result<ObjectValue, FlowyError>;
+  async fn get_object_url_v1(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     file_id: &str,
   ) -> FlowyResult<String>;
 
+  /// Return workspace_id, parent_dir, file_id
+  async fn parse_object_url_v1(&self, url: &str) -> Option<(Uuid, String, String)>;
+
   async fn create_upload(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     file_id: &str,
     content_type: &str,
+    file_size: u64,
   ) -> Result<CreateUploadResponse, FlowyError>;
 
   async fn upload_part(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     upload_id: &str,
     file_id: &str,
@@ -73,7 +77,7 @@ pub trait StorageCloudService: Send + Sync {
 
   async fn complete_upload(
     &self,
-    workspace_id: &str,
+    workspace_id: &Uuid,
     parent_dir: &str,
     upload_id: &str,
     file_id: &str,
@@ -81,15 +85,8 @@ pub trait StorageCloudService: Send + Sync {
   ) -> Result<(), FlowyError>;
 }
 
-pub trait FileStoragePlan: Send + Sync + 'static {
-  fn storage_size(&self) -> FutureResult<u64, FlowyError>;
-  fn maximum_file_size(&self) -> FutureResult<u64, FlowyError>;
-
-  fn check_upload_object(&self, object: &StorageObject) -> FutureResult<(), FlowyError>;
-}
-
 pub struct ObjectIdentity {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub file_id: String,
   pub ext: String,
 }
@@ -101,7 +98,7 @@ pub struct ObjectValue {
 }
 
 pub struct StorageObject {
-  pub workspace_id: String,
+  pub workspace_id: Uuid,
   pub file_name: String,
   pub value: ObjectValueSupabase,
 }
@@ -130,9 +127,9 @@ impl StorageObject {
   /// * `name`: The name of the storage object.
   /// * `file_path`: The file path to the storage object's data.
   ///
-  pub fn from_file<T: ToString>(workspace_id: &str, file_name: &str, file_path: T) -> Self {
+  pub fn from_file<T: ToString>(workspace_id: &Uuid, file_name: &str, file_path: T) -> Self {
     Self {
-      workspace_id: workspace_id.to_string(),
+      workspace_id: *workspace_id,
       file_name: file_name.to_string(),
       value: ObjectValueSupabase::File {
         file_path: file_path.to_string(),
@@ -149,14 +146,14 @@ impl StorageObject {
   /// * `mime`: The MIME type of the storage object.
   ///
   pub fn from_bytes<B: Into<Bytes>>(
-    workspace_id: &str,
+    workspace_id: &Uuid,
     file_name: &str,
     bytes: B,
     mime: String,
   ) -> Self {
     let bytes = bytes.into();
     Self {
-      workspace_id: workspace_id.to_string(),
+      workspace_id: *workspace_id,
       file_name: file_name.to_string(),
       value: ObjectValueSupabase::Bytes { bytes, mime },
     }

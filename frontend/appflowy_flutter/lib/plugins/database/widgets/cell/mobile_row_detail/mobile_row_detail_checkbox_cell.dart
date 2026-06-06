@@ -11,6 +11,7 @@ class MobileRowDetailCheckboxCellSkin extends IEditableCheckboxCellSkin {
   Widget build(
     BuildContext context,
     CellContainerNotifier cellContainerNotifier,
+    ValueNotifier<bool> compactModeNotifier,
     CheckboxCellBloc bloc,
     CheckboxCellState state,
   ) {

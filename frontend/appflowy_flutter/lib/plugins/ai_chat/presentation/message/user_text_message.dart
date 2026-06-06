@@ -1,38 +1,66 @@
+import 'package:appflowy/plugins/ai_chat/application/chat_entity.dart';
+import 'package:appflowy/plugins/ai_chat/application/chat_message_service.dart';
+import 'package:appflowy/plugins/ai_chat/application/chat_message_stream.dart';
+import 'package:appflowy/plugins/ai_chat/application/chat_user_message_bloc.dart';
 import 'package:flowy_infra/theme_extension.dart';
-import 'package:flowy_infra_ui/style_widget/text.dart';
+import 'package:flowy_infra_ui/flowy_infra_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_chat_core/flutter_chat_core.dart';
 
-class ChatTextMessageWidget extends StatelessWidget {
-  const ChatTextMessageWidget({
+import 'user_message_bubble.dart';
+
+class ChatUserMessageWidget extends StatelessWidget {
+  const ChatUserMessageWidget({
     super.key,
     required this.user,
-    required this.messageUserId,
-    required this.text,
+    required this.message,
   });
 
   final User user;
-  final String messageUserId;
-  final String text;
+  final TextMessage message;
 
   @override
   Widget build(BuildContext context) {
-    return _textWidgetBuilder(user, context, text);
+    final stream = message.metadata?["$QuestionStream"];
+    final messageText = stream is QuestionStream ? stream.text : message.text;
+
+    return BlocProvider(
+      create: (context) => ChatUserMessageBloc(
+        text: messageText,
+        questionStream: stream,
+      ),
+      child: ChatUserMessageBubble(
+        message: message,
+        files: _getFiles(),
+        child: BlocBuilder<ChatUserMessageBloc, ChatUserMessageState>(
+          builder: (context, state) {
+            return Opacity(
+              opacity: state.messageState.isFinish ? 1.0 : 0.8,
+              child: TextMessageText(
+                text: state.text,
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 
-  Widget _textWidgetBuilder(
-    User user,
-    BuildContext context,
-    String text,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        TextMessageText(
-          text: text,
-        ),
-      ],
-    );
+  List<ChatFile> _getFiles() {
+    if (message.metadata == null) {
+      return const [];
+    }
+
+    final refSourceMetadata =
+        message.metadata?[messageRefSourceJsonStringKey] as String?;
+    if (refSourceMetadata != null) {
+      return chatFilesFromMetadataString(refSourceMetadata);
+    }
+
+    final chatFileList =
+        message.metadata![messageChatFileListKey] as List<ChatFile>?;
+    return chatFileList ?? [];
   }
 }
 
@@ -50,10 +78,8 @@ class TextMessageText extends StatelessWidget {
   Widget build(BuildContext context) {
     return FlowyText(
       text,
-      fontSize: 16,
-      fontWeight: FontWeight.w500,
+      lineHeight: 1.4,
       maxLines: null,
-      selectable: true,
       color: AFThemeExtension.of(context).textColor,
     );
   }
